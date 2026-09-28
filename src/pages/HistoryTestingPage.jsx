@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Eye,
@@ -9,6 +9,16 @@ import {
   ArrowUpDown,
   FileSpreadsheet
 } from 'lucide-react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import * as XLSX from 'xlsx';
 import SkeletonTable from '../components/SkeletonTable';
@@ -18,7 +28,50 @@ import AntDateRangePicker from '../components/AntDateRangePicker';
 import ModalPortal from '../components/ModalPortal';
 import PageHeaderCard from '../components/PageHeaderCard';
 
-const STROKE_LABELS = [0, 10, 20, 30, 40, 50, 60];
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+// Vertical guideline plugin matching TestingProcessPage
+const verticalLinePlugin = {
+  id: 'verticalGuidelineHistory',
+  afterDraw: (chart) => {
+    if (chart.tooltip?._active?.length) {
+      const activePoint = chart.tooltip._active[0];
+      const dataIndex = activePoint.index;
+      const hasDataAtPoint = chart.data.datasets.some((ds, idx) => {
+        if (chart.isDatasetVisible(idx) === false) return false;
+        const val = ds.data?.[dataIndex];
+        return val !== null && val !== undefined;
+      });
+
+      if (!hasDataAtPoint) return;
+
+      const ctx = chart.ctx;
+      const x = activePoint.element.x;
+      const topY = chart.scales.y.top;
+      const bottomY = chart.scales.y.bottom;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x, topY);
+      ctx.lineTo(x, bottomY);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#B0E9CF'; // Matching user's vertical guideline
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+};
+
+const STROKE_LABELS = [0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90];
 
 const TRIAL_COLORS = [
   '#FF4D4F',
@@ -46,6 +99,324 @@ export default function HistoryTestingPage({
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [viewRecord, setViewRecord] = useState(null);
   const [toast, setToast] = useState(null);
+  const modalTooltipRef = useRef(null);
+
+  // Custom Tooltip HTML matching Testing Process Page exactly
+  const customModalTooltipHandler = (context) => {
+    const { chart, tooltip } = context;
+    const tooltipEl = modalTooltipRef.current;
+    if (!tooltipEl) return;
+
+    if (tooltip.opacity === 0) {
+      tooltipEl.style.opacity = '0';
+      return;
+    }
+
+    if (tooltip.body) {
+      let innerHtml = `
+        <div style="text-align: center; font-weight: 700; font-size: 11px; color: #101828; margin-bottom: 8px;">
+          Testing Value
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+      `;
+
+      let hasValidPoints = false;
+      tooltip.dataPoints.forEach((dp) => {
+        if (dp.raw === null || dp.raw === undefined) return;
+
+        hasValidPoints = true;
+        const dataset = chart.data.datasets[dp.datasetIndex];
+        const color = dataset.borderColor;
+        const label = dataset.label;
+        const val = dp.formattedValue;
+
+        innerHtml += `
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; white-space: nowrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${color}; flex-shrink: 0;"></span>
+              <span style="font-size: 11px; color: #475467; font-weight: 500;">${label}</span>
+            </div>
+            <span style="font-size: 11px; color: #101828; font-weight: 700; margin-left: 12px;">${val}</span>
+          </div>
+        `;
+      });
+
+      if (!hasValidPoints) {
+        tooltipEl.style.opacity = '0';
+        return;
+      }
+
+      innerHtml += `</div>`;
+      tooltipEl.innerHTML = innerHtml;
+    }
+
+    const { offsetLeft: positionX, offsetTop: positionY } = chart.canvas;
+    const chartWidth = chart.width;
+    const chartHeight = chart.height;
+
+    tooltipEl.style.opacity = '1';
+
+    if (tooltip.caretX > chartWidth * 0.55) {
+      tooltipEl.style.left = (positionX + tooltip.caretX - 16) + 'px';
+      const clampedY = Math.max(50, Math.min(tooltip.caretY, chartHeight - 70));
+      tooltipEl.style.top = (positionY + clampedY) + 'px';
+      tooltipEl.style.transform = 'translate(-100%, -50%)';
+    } else if (tooltip.caretX < chartWidth * 0.18) {
+      tooltipEl.style.left = (positionX + tooltip.caretX + 16) + 'px';
+      const clampedY = Math.max(50, Math.min(tooltip.caretY, chartHeight - 70));
+      tooltipEl.style.top = (positionY + clampedY) + 'px';
+      tooltipEl.style.transform = 'translate(0%, -50%)';
+    } else {
+      tooltipEl.style.left = (positionX + tooltip.caretX) + 'px';
+      const clampedY = Math.max(60, tooltip.caretY);
+      tooltipEl.style.top = (positionY + clampedY) + 'px';
+      tooltipEl.style.transform = 'translate(-50%, -115%)';
+    }
+  };
+
+  // Modal Chart Options identical to TestingProcessPage
+  const modalChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: {
+      mode: 'index',
+      intersect: false
+    },
+    plugins: {
+      legend: {
+        position: 'bottom',
+        cursor: 'pointer',
+        onClick: (e, legendItem, legend) => {
+          const chart = legend.chart;
+          const trialIndex = legendItem.datasetIndex;
+          const dsIdx1 = trialIndex * 2;
+          const dsIdx2 = trialIndex * 2 + 1;
+          const isVisible = chart.isDatasetVisible(dsIdx1);
+          chart.setDatasetVisibility(dsIdx1, !isVisible);
+          if (chart.data.datasets[dsIdx2]) {
+            chart.setDatasetVisibility(dsIdx2, !isVisible);
+          }
+          chart.update();
+        },
+        labels: {
+          generateLabels: (chart) => {
+            const datasets = chart.data.datasets;
+            const items = [];
+            for (let i = 0; i < datasets.length; i += 2) {
+              const trialNum = Math.floor(i / 2) + 1;
+              const color = datasets[i].borderColor;
+              const isHidden = !chart.isDatasetVisible(i);
+              items.push({
+                text: `Testing ${trialNum}`,
+                fillStyle: color,
+                strokeStyle: color,
+                lineWidth: 1,
+                hidden: isHidden,
+                datasetIndex: Math.floor(i / 2)
+              });
+            }
+            return items;
+          },
+          usePointStyle: true,
+          pointStyle: 'circle',
+          padding: 14,
+          boxWidth: 8,
+          boxHeight: 8,
+          font: {
+            size: 11,
+            family: 'Inter, sans-serif'
+          },
+          color: '#475467'
+        }
+      },
+      tooltip: {
+        enabled: false,
+        external: customModalTooltipHandler
+      }
+    },
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: 'Disp. (mm)',
+          color: '#4C4E67',
+          font: { size: 12, weight: '500' }
+        },
+        grid: {
+          display: true,
+          color: '#F2F4F7'
+        },
+        ticks: {
+          color: '#475467',
+          font: { size: 10 }
+        }
+      },
+      y: {
+        title: {
+          display: true,
+          text: 'Force (N)',
+          color: '#4C4E67',
+          font: { size: 12, weight: '500' }
+        },
+        min: -100,
+        max: 1500,
+        ticks: {
+          stepSize: 100,
+          color: '#475467',
+          font: { size: 10 }
+        },
+        grid: {
+          color: '#F2F4F7'
+        }
+      }
+    }
+  };
+
+  // Convert record chartData to identical dual-curve datasets
+  const getModalDatasets = (record) => {
+    if (!record?.chartData) return [];
+    const cd = record.chartData;
+
+    if (cd.trials && cd.trials.length > 0) {
+      return cd.trials.flatMap((tData, i) => {
+        const color = TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854';
+        return [
+          {
+            label: `Testing ${i + 1} (Kompresi)`,
+            data: tData.compression,
+            borderColor: color,
+            backgroundColor: color,
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: color,
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+            spanGaps: false
+          },
+          {
+            label: `Testing ${i + 1} (Rebound)`,
+            data: tData.rebound,
+            borderColor: color,
+            backgroundColor: color,
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: color,
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+            spanGaps: false
+          }
+        ];
+      });
+    }
+
+    if (cd.cycles && cd.cycles.length > 0) {
+      return cd.cycles.flatMap((c, i) => {
+        const color = TRIAL_COLORS[i % TRIAL_COLORS.length] || '#1890FF';
+        return [
+          {
+            label: `Testing ${c.cycleNum || i + 1} (Kompresi)`,
+            data: c.compression,
+            borderColor: color,
+            backgroundColor: color,
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: color,
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+            spanGaps: false
+          },
+          {
+            label: `Testing ${c.cycleNum || i + 1} (Rebound)`,
+            data: c.rebound,
+            borderColor: color,
+            backgroundColor: color,
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: color,
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+            spanGaps: false
+          }
+        ];
+      });
+    }
+
+    if (cd.compression && cd.rebound) {
+      const color = TRIAL_COLORS[0];
+      return [
+        {
+          label: 'Testing 1 (Kompresi)',
+          data: cd.compression,
+          borderColor: color,
+          backgroundColor: color,
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: color,
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1.5,
+          spanGaps: false
+        },
+        {
+          label: 'Testing 1 (Rebound)',
+          data: cd.rebound,
+          borderColor: color,
+          backgroundColor: color,
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: color,
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1.5,
+          spanGaps: false
+        }
+      ];
+    }
+
+    // Default hysteresis curve
+    const color = TRIAL_COLORS[0];
+    return [
+      {
+        label: 'Testing 1 (Kompresi)',
+        data: cd.s1 || [0, 160, 210, 250, 290, 330, 375, 425, 485, 560, 650, 760, 890, 1030, 1090, null],
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
+        tension: 0.35,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: color,
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.5,
+        spanGaps: false
+      },
+      {
+        label: 'Testing 1 (Rebound)',
+        data: cd.s2 || [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750, 890, 1090, null],
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
+        tension: 0.35,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: color,
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.5,
+        spanGaps: false
+      }
+    ];
+  };
 
   // Skeleton loader on enter
   useEffect(() => {
@@ -77,48 +448,75 @@ export default function HistoryTestingPage({
   const handleDownloadExcel = (record) => {
     const wb = XLSX.utils.book_new();
     const data = [
-      ['ASTEMO - HISTORICAL TEST DATA'],
+      ['ASTEMO - HISTORICAL TEST DATA (SHOCK ABSORBER)'],
       ['Model', record.model],
       ['Testing Datetime', record.datetime],
       ['Speed (mm/min)', record.speed || 500],
       ['Stroke (mm)', record.stroke || 20],
       ['Angle (deg)', record.angle || 45],
-      ['Trials Count', record.trialsCount || (record.chartData?.trials ? record.chartData.trials.length : 3)],
+      ['Trials Count', record.trialsCount || (record.chartData?.cycles ? record.chartData.cycles.length : 1)],
       [],
       ['REALTIME PARAMETERS'],
-      ['Stroke', record.metrics?.stroke || 55],
-      ['Load', record.metrics?.load || 55],
-      ['Load Compression', record.metrics?.loadCompression || 58],
-      ['Load Force', record.metrics?.loadForce || 59],
-      ['Friction Force', record.metrics?.frictionForce || 50]
+      ['Stroke (mm)', record.metrics?.stroke || 60],
+      ['Peak Load (N)', record.metrics?.load || 58],
+      ['Peak Load Compression (N)', record.metrics?.loadCompression || 58],
+      ['Peak Rebound Force (N)', record.metrics?.loadForce || 48.5],
+      ['Friction Force (N)', record.metrics?.frictionForce || 50]
     ];
 
     if (record.chartData) {
       data.push([]);
-      data.push(['CHART DATA (LOAD N vs STROKE mm)']);
+      data.push(['CHART DATA: FORCE (N) vs STROKE (mm)']);
 
-      // Support dynamic trials if trials array is present
-      const trialList = record.chartData.trials
-        ? record.chartData.trials
-        : [
-          record.chartData.s1,
-          record.chartData.s2,
-          record.chartData.s3,
-          record.chartData.s4,
-          record.chartData.s5
-        ].filter(Boolean);
-
-      const header = ['Stroke (mm)'];
-      trialList.forEach((_, idx) => header.push(`Testing ${idx + 1} (N)`));
-      data.push(header);
-
-      STROKE_LABELS.forEach((s, ptIdx) => {
-        const row = [s];
-        trialList.forEach((tData) => {
-          row.push(tData?.[ptIdx] || 0);
+      if (record.chartData.cycles && record.chartData.cycles.length > 0) {
+        const header = ['Stroke (mm)'];
+        record.chartData.cycles.forEach((c) => {
+          header.push(`Siklus ${c.cycleNum} - Kompresi (N)`);
+          header.push(`Siklus ${c.cycleNum} - Rebound (N)`);
         });
-        data.push(row);
-      });
+        data.push(header);
+
+        STROKE_LABELS.forEach((s, ptIdx) => {
+          const row = [s];
+          record.chartData.cycles.forEach((c) => {
+            row.push(c.compression?.[ptIdx] ?? 0);
+            row.push(c.rebound?.[ptIdx] ?? 0);
+          });
+          data.push(row);
+        });
+      } else if (record.chartData.compression && record.chartData.rebound) {
+        data.push(['Stroke (mm)', 'Fase Kompresi (N)', 'Fase Rebound (N)']);
+        STROKE_LABELS.forEach((s, ptIdx) => {
+          data.push([
+            s,
+            record.chartData.compression[ptIdx] ?? 0,
+            record.chartData.rebound[ptIdx] ?? 0
+          ]);
+        });
+      } else {
+        // Fallback for legacy format
+        const trialList = record.chartData.trials
+          ? record.chartData.trials
+          : [
+            record.chartData.s1,
+            record.chartData.s2,
+            record.chartData.s3,
+            record.chartData.s4,
+            record.chartData.s5
+          ].filter(Boolean);
+
+        const header = ['Stroke (mm)'];
+        trialList.forEach((_, idx) => header.push(`Testing ${idx + 1} (N)`));
+        data.push(header);
+
+        STROKE_LABELS.forEach((s, ptIdx) => {
+          const row = [s];
+          trialList.forEach((tData) => {
+            row.push(tData?.[ptIdx] || 0);
+          });
+          data.push(row);
+        });
+      }
     }
 
     const ws = XLSX.utils.aoa_to_sheet(data);
@@ -334,11 +732,10 @@ export default function HistoryTestingPage({
           </div>
         </div>
 
-        {/* View Record Modal rendered via ModalPortal (100% full-screen blur with ZERO gap) */}
-        {/* View Record Modal rendered via ModalPortal (Matching Validation Modal with Chart on Top) */}
+        {/* View Record Modal rendered via ModalPortal (Matching Testing Process Chart) */}
         <ModalPortal isOpen={!!viewRecord} onClose={() => setViewRecord(null)}>
           {viewRecord && (
-            <div className="bg-white rounded-xl max-w-[560px] w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-[#EAECF0] animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-xl max-w-[620px] w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-[#EAECF0] animate-in fade-in zoom-in-95 duration-200">
               {/* 1. Header with bottom divider line */}
               <div className="flex items-start justify-between px-6 py-4 border-b border-[#EAECF0] flex-shrink-0">
                 <div>
@@ -363,78 +760,22 @@ export default function HistoryTestingPage({
                 <div>
                   <p className="text-sm text-[#344054] mb-2 font-normal">Testing Curves</p>
                   <div className="border border-[#D0D5DD] rounded-xl p-3 bg-white">
-                    <div className="h-44 w-full">
+                    <div className="h-[280px] sm:h-[300px] w-full relative">
                       <Line
                         data={{
                           labels: STROKE_LABELS,
-                          datasets: viewRecord.chartData?.trials
-                            ? viewRecord.chartData.trials.map((tData, i) => ({
-                              label: `Testing ${i + 1}`,
-                              data: tData,
-                              borderColor: TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854',
-                              borderWidth: 2,
-                              tension: 0.35,
-                              pointRadius: 0
-                            }))
-                            : [
-                              {
-                                label: 'First Testing',
-                                data: viewRecord.chartData?.s1 || [0, 1.5, 4.0, 9.5, 17.5, 33.0, 48.0],
-                                borderColor: '#FF4D4F',
-                                borderWidth: 2,
-                                tension: 0.35,
-                                pointRadius: 0
-                              },
-                              {
-                                label: 'Second Testing',
-                                data: viewRecord.chartData?.s2 || [0, 2.5, 6.0, 12.0, 21.0, 38.0, 50.0],
-                                borderColor: '#1890FF',
-                                borderWidth: 2,
-                                tension: 0.35,
-                                pointRadius: 0
-                              },
-                              {
-                                label: 'Third Testing',
-                                data: viewRecord.chartData?.s3 || [0, 5.0, 10.5, 17.0, 26.5, 45.0, 54.0],
-                                borderColor: '#00A854',
-                                borderWidth: 2,
-                                tension: 0.35,
-                                pointRadius: 0
-                              }
-                            ]
+                          datasets: getModalDatasets(viewRecord)
                         }}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: {
-                            legend: {
-                              position: 'bottom',
-                              labels: {
-                                boxWidth: 10,
-                                font: { size: 10, family: 'Inter, sans-serif' },
-                                color: '#475467'
-                              }
-                            },
-                            tooltip: {
-                              backgroundColor: '#1E232F',
-                              titleFont: { size: 11 },
-                              bodyFont: { size: 11 },
-                              padding: 8,
-                              cornerRadius: 6
-                            }
-                          },
-                          scales: {
-                            x: {
-                              grid: { display: false },
-                              ticks: { font: { size: 10 }, color: '#475467' }
-                            },
-                            y: {
-                              min: 0,
-                              max: 65,
-                              grid: { color: '#F2F4F7' },
-                              ticks: { stepSize: 10, font: { size: 10 }, color: '#475467' }
-                            }
-                          }
+                        options={modalChartOptions}
+                        plugins={[verticalLinePlugin]}
+                      />
+
+                      {/* Floating Custom Tooltip Container matching Testing Process Page */}
+                      <div
+                        ref={modalTooltipRef}
+                        className="pointer-events-none absolute z-20 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 shadow-lg transition-all duration-75 opacity-0 min-w-[140px] whitespace-nowrap"
+                        style={{
+                          boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
                         }}
                       />
                     </div>

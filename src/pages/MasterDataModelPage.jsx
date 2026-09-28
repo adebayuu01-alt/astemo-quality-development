@@ -212,7 +212,7 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
             <div>
               Showing <span className="font-semibold text-gray-700">1</span> to{' '}
               <span className="font-semibold text-gray-700">
-                {Math.min(itemsPerPage, totalEntries)}
+                {Math.min(itemsPerPage, totalEntries)}  
               </span>{' '}
               of <span className="font-semibold text-gray-700">{totalEntries}</span>{' '}
               entries

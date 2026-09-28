@@ -112,8 +112,8 @@ export default function Layout({
               <button
                 onClick={() => onNavigate('testing-process')}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'testing-process' || activeMenu === 'history-testing'
-                    ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
-                    : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
+                  : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 title="Testing Process"
               >
@@ -133,8 +133,8 @@ export default function Layout({
                 <button
                   onClick={() => onNavigate('user-management')}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'user-management'
-                      ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
-                      : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
+                    : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
                     }`}
                   title="User Management"
                 >
@@ -145,8 +145,8 @@ export default function Layout({
                 <button
                   onClick={() => onNavigate('role-management')}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'role-management'
-                      ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
-                      : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
+                    : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
                     }`}
                   title="Role Management"
                 >
@@ -181,8 +181,8 @@ export default function Layout({
                       }
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'master-data-model'
-                        ? 'text-[#00A854] font-semibold'
-                        : 'text-[#475467] hover:bg-gray-50'
+                      ? 'text-[#00A854] font-semibold'
+                      : 'text-[#475467] hover:bg-gray-50'
                       }`}
                     title="Master Data"
                   >
@@ -211,15 +211,13 @@ export default function Layout({
                         <button
                           onClick={() => onNavigate('master-data-model')}
                           className={`w-full flex items-center px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'master-data-model'
-                              ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
-                              : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
+                            ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
+                            : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
                             }`}
                         >
                           <span>Model</span>
                         </button>
                       </div>
-
-                      {/* Parameter Tree Item */}
                     </div>
                   )}
                 </div>
