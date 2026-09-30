@@ -71,8 +71,10 @@ const verticalLinePlugin = {
   }
 };
 
-const STROKE_LABELS = [0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90];
+const TOTAL_POINTS = 1700;
+const STROKE_LABELS = Array.from({ length: TOTAL_POINTS }, (_, i) => i + 1);
 
+// Machine curve colors: Kompresi (Menekan Shock) = Merah, Tensi (Menarik Shock) = Ungu
 // Machine curve colors: Kompresi (Menekan Shock) = Merah, Tensi (Menarik Shock) = Ungu
 const COMPRESSION_COLOR = '#EF4444'; // Red (Kompresi)
 const TENSION_COLOR = '#7C3AED';     // Purple (Tensi)
@@ -85,15 +87,11 @@ const transitionLinePlugin = {
     if (!datasets || datasets.length < 2) return;
 
     // Cari dataset Kompresi dan Tensi
-    const compIdx = datasets.findIndex((ds) => ds.isCompression || ds.label === 'Compression');
-    const tensIdx = datasets.findIndex((ds) => ds.isTension || ds.label === 'Tension');
+    const compIdx = datasets.findIndex((ds) => ds.isCompression || ds.label?.includes('Compression'));
+    const tensIdx = datasets.findIndex((ds) => ds.isTension || ds.label?.includes('Tension'));
     if (compIdx === -1 || tensIdx === -1) return;
 
     if (!chart.isDatasetVisible(compIdx) || !chart.isDatasetVisible(tensIdx)) return;
-
-    const compMeta = chart.getDatasetMeta(compIdx);
-    const tensMeta = chart.getDatasetMeta(tensIdx);
-    if (!compMeta?.data?.length || !tensMeta?.data?.length) return;
 
     // Cari index titik terjauh (stroke maksimal) yang sudah memiliki data kompresi
     let peakIdx = -1;
@@ -111,14 +109,32 @@ const transitionLinePlugin = {
     const tensVal = datasets[tensIdx].data?.[peakIdx];
     if (tensVal === null || tensVal === undefined) return;
 
-    const ptComp = compMeta.data[peakIdx];
-    const ptTens = tensMeta.data[peakIdx];
-    if (!ptComp || ptComp.skip || !ptTens || ptTens.skip) return;
+    const compMeta = chart.getDatasetMeta(compIdx);
+    const tensMeta = chart.getDatasetMeta(tensIdx);
 
-    const x1 = ptComp.x;
-    const y1 = ptComp.y;
-    const x2 = ptTens.x;
-    const y2 = ptTens.y;
+    const ptComp = compMeta?.data?.[peakIdx];
+    const ptTens = tensMeta?.data?.[peakIdx];
+
+    const compVal = datasets[compIdx].data[peakIdx];
+    const tensValNum = datasets[tensIdx].data[peakIdx];
+
+    const x1 = (ptComp && typeof ptComp.x === 'number' && !isNaN(ptComp.x))
+      ? ptComp.x
+      : chart.scales.x.getPixelForValue(peakIdx);
+
+    const y1 = (ptComp && typeof ptComp.y === 'number' && !isNaN(ptComp.y))
+      ? ptComp.y
+      : chart.scales.y.getPixelForValue(compVal);
+
+    const x2 = (ptTens && typeof ptTens.x === 'number' && !isNaN(ptTens.x))
+      ? ptTens.x
+      : chart.scales.x.getPixelForValue(peakIdx);
+
+    const y2 = (ptTens && typeof ptTens.y === 'number' && !isNaN(ptTens.y))
+      ? ptTens.y
+      : chart.scales.y.getPixelForValue(tensValNum);
+
+    if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) return;
 
     const ctx = chart.ctx;
     ctx.save();
@@ -127,57 +143,114 @@ const transitionLinePlugin = {
 
     // Lengkungan transisi keluar ke kanan (bulge) seperti pada mesin aktual / gambar referensi
     const dy = y2 - y1;
-    const bulge = Math.max(5, Math.min(12, Math.abs(dy) * 0.14));
+    const bulge = Math.max(6, Math.min(14, Math.abs(dy) * 0.12));
 
     const ctrlX1 = x1 + bulge;
-    const ctrlY1 = y1 + dy * 0.25;
+    const ctrlY1 = y1 + dy * 0.22;
     const ctrlX2 = x2 + bulge;
-    const ctrlY2 = y2 - dy * 0.25;
+    const ctrlY2 = y2 - dy * 0.22;
 
     ctx.bezierCurveTo(ctrlX1, ctrlY1, ctrlX2, ctrlY2, x2, y2);
 
     // Gradien mulus dari Merah (Kompresi) ke Ungu (Tensi)
+    const compColor = datasets[compIdx].borderColor || COMPRESSION_COLOR;
+    const tensColor = datasets[tensIdx].borderColor || TENSION_COLOR;
     const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-    grad.addColorStop(0, '#EF4444');
+    grad.addColorStop(0, compColor);
     grad.addColorStop(0.35, '#E11D48');
     grad.addColorStop(0.7, '#8B5CF6');
-    grad.addColorStop(1, '#7C3AED');
+    grad.addColorStop(1, tensColor);
 
     ctx.strokeStyle = grad;
-    ctx.lineWidth = datasets[compIdx].borderWidth || 2;
+    ctx.lineWidth = Math.max(2, datasets[compIdx].borderWidth || 2);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
+
+    // Aksen titik terminal di sambungan kurva
+    ctx.beginPath();
+    ctx.arc(x1, y1, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = compColor;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x2, y2, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = tensColor;
+    ctx.fill();
+
     ctx.restore();
   }
 };
 
-// Realistic Hysteresis benchmark datasets matching machine monitor (0 - 90 mm, -100 to 1500 N)
-const BASE_HYSTERESIS_TARGETS = [
-  {
-    compression: [0, 160, 210, 250, 290, 330, 375, 425, 485, 560, 650, 760, 890, 1030, 1090, null],
-    rebound: [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750, 890, 890, null]
-  },
-  {
-    compression: [0, 170, 222, 265, 305, 348, 395, 448, 510, 588, 680, 795, 925, 1070, 1130, null],
-    rebound: [0, 125, 170, 208, 245, 282, 322, 370, 422, 490, 568, 665, 782, 925, 925, null]
-  },
-  {
-    compression: [0, 180, 235, 278, 320, 365, 412, 468, 532, 612, 708, 825, 958, 1105, 1165, null],
-    rebound: [0, 135, 180, 220, 258, 295, 338, 388, 442, 512, 592, 692, 810, 958, 958, null]
-  },
-  {
-    compression: [0, 190, 248, 290, 335, 380, 428, 485, 550, 632, 730, 850, 985, 1135, 1195, null],
-    rebound: [0, 142, 190, 232, 270, 308, 352, 405, 460, 530, 612, 715, 835, 985, 985, null]
-  },
-  {
-    compression: [0, 200, 260, 302, 348, 395, 445, 502, 570, 655, 755, 878, 1015, 1165, 1225, null],
-    rebound: [0, 150, 200, 242, 282, 322, 368, 422, 480, 550, 635, 740, 865, 1015, 1015, null]
-  },
-  {
-    compression: [0, 210, 272, 315, 362, 410, 462, 520, 590, 678, 780, 905, 1045, 1195, 1255, null],
-    rebound: [0, 158, 210, 252, 295, 335, 382, 438, 500, 572, 660, 765, 895, 1045, 1045, null]
+const BASELINE_COMPRESSION = [0, 160, 210, 250, 290, 330, 375, 425, 485, 560, 650, 760, 890, 1030, 1090];
+const BASELINE_REBOUND     = [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750,  890,  890];
+
+function catmullRom(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return 0.5 * (
+    (2 * p1) +
+    (-p0 + p2) * t +
+    (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+    (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+  );
+}
+
+function interpolateBenchmark(baseArr, count) {
+  const res = [];
+  const n = baseArr.length;
+  for (let i = 0; i < count; i++) {
+    const norm = (i / (count - 1)) * (n - 1);
+    const idx = Math.floor(norm);
+    const t = norm - idx;
+    if (idx >= n - 1) {
+      res.push(baseArr[n - 1]);
+      continue;
+    }
+    const p0 = baseArr[Math.max(0, idx - 1)];
+    const p1 = baseArr[idx];
+    const p2 = baseArr[Math.min(n - 1, idx + 1)];
+    const p3 = baseArr[Math.min(n - 1, idx + 2)];
+    res.push(catmullRom(p0, p1, p2, p3, t));
   }
+  return res;
+}
+
+// Realistic Hysteresis curve generator with 1700 high-resolution data points (1 to 1700) matching benchmark curve
+const generateCurvePoints = (peakComp = 1090, peakTension = 890, noiseSeed = 1) => {
+  const compBase = interpolateBenchmark(BASELINE_COMPRESSION, TOTAL_POINTS);
+  const rebBase = interpolateBenchmark(BASELINE_REBOUND, TOTAL_POINTS);
+
+  const compScale = peakComp / 1090;
+  const rebScale = peakTension / 890;
+
+  const comp = [];
+  const reb = [];
+
+  for (let i = 0; i < TOTAL_POINTS; i++) {
+    if (i === 0) {
+      comp.push(0);
+      reb.push(0);
+    } else if (i === TOTAL_POINTS - 1) {
+      comp.push(peakComp);
+      reb.push(peakTension);
+    } else {
+      const jitter = Math.sin((i + 1) * 0.45 + noiseSeed) * 0.4 + Math.cos((i + 1) * 0.85 + noiseSeed) * 0.3;
+      comp.push(Math.round(compBase[i] * compScale + jitter));
+      reb.push(Math.round(rebBase[i] * rebScale + jitter * 0.7));
+    }
+  }
+
+  return { compression: comp, rebound: reb };
+};
+
+const BASE_HYSTERESIS_TARGETS = [
+  generateCurvePoints(1090, 890, 1),
+  generateCurvePoints(1130, 925, 2),
+  generateCurvePoints(1165, 958, 3),
+  generateCurvePoints(1195, 985, 4),
+  generateCurvePoints(1225, 1015, 5),
+  generateCurvePoints(1255, 1045, 6)
 ];
 
 const WARMUP_COLORS = [
@@ -211,13 +284,10 @@ const getTargetHysteresis = (trialIdx) => {
     return BASE_HYSTERESIS_TARGETS[trialIdx];
   }
   const offset = (trialIdx - 5) * 30;
-  return {
-    compression: [0, 210 + offset, 272 + offset, 315 + offset, 362 + offset, 410 + offset, 462 + offset, 520 + offset, 590 + offset, 678 + offset, 780 + offset, 905 + offset, 1045 + offset, 1195 + offset, 1255 + offset, null],
-    rebound: [0, 158 + offset, 210 + offset, 252 + offset, 295 + offset, 335 + offset, 382 + offset, 438 + offset, 500 + offset, 572 + offset, 660 + offset, 765 + offset, 895 + offset, 1045 + offset, 1045 + offset, null]
-  };
+  return generateCurvePoints(1255 + offset, 1045 + offset, trialIdx);
 };
 
-// Helper: Calculate compression, tension, and friction force for a given stroke
+// Helper: Calculate compression, tension, and friction force for a given stroke/point (1 - 1700)
 const calculateStrokeLoads = (inputStrokeVal, trialIdx = 0) => {
   const parsed = parseFloat(inputStrokeVal);
   if (isNaN(parsed) || parsed <= 0) {
@@ -225,21 +295,11 @@ const calculateStrokeLoads = (inputStrokeVal, trialIdx = 0) => {
   }
 
   const target = getTargetHysteresis(trialIdx);
-  const clampedStroke = Math.min(84, Math.max(0, parsed));
+  const clampedPoint = Math.min(TOTAL_POINTS, Math.max(1, Math.round(parsed)));
+  const idx = clampedPoint - 1;
 
-  const stepSize = 6;
-  const lowerIndex = Math.floor(clampedStroke / stepSize);
-  const upperIndex = Math.min(lowerIndex + 1, 14);
-  const ratio = (clampedStroke - lowerIndex * stepSize) / stepSize;
-
-  const cLow = target.compression[lowerIndex] ?? 0;
-  const cHigh = target.compression[upperIndex] ?? cLow;
-  const compVal = Math.round(cLow + (cHigh - cLow) * ratio);
-
-  const tLow = target.rebound[lowerIndex] ?? 0;
-  const tHigh = target.rebound[upperIndex] ?? tLow;
-  const tensionVal = Math.round(tLow + (tHigh - tLow) * ratio);
-
+  const compVal = target.compression[idx] ?? 0;
+  const tensionVal = target.rebound[idx] ?? 0;
   const frictionVal = Math.abs(compVal - tensionVal);
 
   return {
@@ -279,8 +339,18 @@ export default function TestingProcessPage({
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  // Chart Zoom State (Image 2: Zoom in, Zoom out, Reset Zoom)
+  // Chart Zoom State & Scroll Container Refs
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const chartScrollContainerRef = useRef(null);
+  const [containerBaseWidth, setContainerBaseWidth] = useState(720);
+  const [containerBaseHeight, setContainerBaseHeight] = useState(360);
+  const panRef = useRef({
+    xMin: undefined,
+    xMax: undefined,
+    yMin: -100,
+    yMax: 1500
+  });
+  const scrollRafRef = useRef(null);
 
   // Cycles data array: [{ index, name, isWarmUp, color, compression: [], rebound: [], metrics: {} }]
   const [cycles, setCycles] = useState([]);
@@ -310,23 +380,124 @@ export default function TestingProcessPage({
     });
   };
 
-  // Zoom handlers
+  // Zoom handlers (25% increments: 100% -> 125% -> 150% ... 250% -> 300%)
   const handleZoomIn = () => {
-    setZoomLevel((prev) => Math.min(3.0, +(prev + 0.35).toFixed(2)));
+    setZoomLevel((prev) => Math.min(3.0, +(prev + 0.25).toFixed(2)));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel((prev) => Math.max(1.0, +(prev - 0.35).toFixed(2)));
+    setZoomLevel((prev) => Math.max(1.0, +(prev - 0.25).toFixed(2)));
   };
 
   const handleResetZoom = () => {
     setZoomLevel(1.0);
   };
 
+  // Measure base container dimensions
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (chartScrollContainerRef.current) {
+        const { clientWidth, clientHeight } = chartScrollContainerRef.current;
+        if (clientWidth > 200) setContainerBaseWidth(clientWidth);
+        if (clientHeight > 100) setContainerBaseHeight(clientHeight);
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
+
+  // Update pan window from scroll positions (keeps axes fixed and moves visible range)
+  const updatePanFromScroll = (scrollEl, level) => {
+    if (!scrollEl || level <= 1.0) {
+      panRef.current = {
+        xMin: undefined,
+        xMax: undefined,
+        yMin: -100,
+        yMax: 1500
+      };
+      if (chartRef.current?.options?.scales) {
+        chartRef.current.options.scales.x.min = undefined;
+        chartRef.current.options.scales.x.max = undefined;
+        chartRef.current.options.scales.y.min = -100;
+        chartRef.current.options.scales.y.max = 1500;
+        if (chartRef.current.options.scales.y.ticks) {
+          chartRef.current.options.scales.y.ticks.stepSize = 100;
+        }
+        chartRef.current.update('none');
+      }
+      return;
+    }
+
+    const maxScrollLeft = scrollEl.scrollWidth - scrollEl.clientWidth;
+    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
+    const xRatio = maxScrollLeft > 0 ? scrollEl.scrollLeft / maxScrollLeft : 0.5;
+    const yRatio = maxScrollTop > 0 ? scrollEl.scrollTop / maxScrollTop : 0.5;
+
+    const visiblePoints = Math.max(50, Math.round(TOTAL_POINTS / level));
+    const maxOffset = TOTAL_POINTS - visiblePoints;
+    const xMin = Math.max(0, Math.min(maxOffset, Math.round(xRatio * maxOffset)));
+    const xMax = Math.min(TOTAL_POINTS - 1, xMin + visiblePoints - 1);
+
+    const totalYRange = 1600; // -100 to 1500
+    const visibleYRange = Math.max(100, Math.round(totalYRange / level));
+    const maxYOffset = totalYRange - visibleYRange;
+    // When scrollTop is 0 (scrolled to top), show high forces (yMax = 1500).
+    // When scrollTop is max (scrolled to bottom), show low forces (yMin = -100).
+    const yMax = Math.round(1500 - yRatio * maxYOffset);
+    const yMin = yMax - visibleYRange;
+
+    const stepSize = level > 2.5 ? 25 : (level > 1.5 ? 50 : 100);
+
+    panRef.current = { xMin, xMax, yMin, yMax };
+
+    if (chartRef.current?.options?.scales) {
+      chartRef.current.options.scales.x.min = xMin;
+      chartRef.current.options.scales.x.max = xMax;
+      chartRef.current.options.scales.y.min = yMin;
+      chartRef.current.options.scales.y.max = yMax;
+      if (chartRef.current.options.scales.y.ticks) {
+        chartRef.current.options.scales.y.ticks.stepSize = stepSize;
+      }
+      chartRef.current.update('none');
+    }
+  };
+
+  const handleScroll = (e) => {
+    if (zoomLevel <= 1.0) return;
+    const el = e.currentTarget;
+    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      updatePanFromScroll(el, zoomLevel);
+    });
+  };
+
+  // Center scroll position and synchronize scales when zoomLevel changes
+  useEffect(() => {
+    if (!chartScrollContainerRef.current) return;
+    const el = chartScrollContainerRef.current;
+
+    if (zoomLevel <= 1.0) {
+      el.scrollLeft = 0;
+      el.scrollTop = 0;
+      updatePanFromScroll(el, 1.0);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const maxScrollLeft = el.scrollWidth - el.clientWidth;
+      const maxScrollTop = el.scrollHeight - el.clientHeight;
+      el.scrollLeft = maxScrollLeft / 2;
+      el.scrollTop = maxScrollTop / 2;
+      updatePanFromScroll(el, zoomLevel);
+    });
+  }, [zoomLevel]);
+
   // Memoize computedLoads so it does NOT cause unnecessary re-renders
   const computedLoads = useMemo(() => {
     if (completedCycles > 0 || isRunning || actualTestCompleted) {
-      return calculateStrokeLoads(stroke || 84.5, Math.max(0, currentCycle));
+      return calculateStrokeLoads(stroke || 1700, Math.max(0, currentCycle));
     }
     return { compression: 0, tension: 0, friction: 0 };
   }, [completedCycles, isRunning, actualTestCompleted, stroke, currentCycle]);
@@ -346,7 +517,7 @@ export default function TestingProcessPage({
       const target = getTargetHysteresis(currentCycle);
       let stepIdx = 0;
 
-      // Start with first dot at stroke 0 mm for Compression
+      // Start with first dot at point 1 for Compression
       setCycles((prev) => {
         const next = [...prev];
         if (!next[currentCycle]) return prev;
@@ -367,25 +538,31 @@ export default function TestingProcessPage({
       });
       setProgress(0);
 
-      // Simulation steps (160ms per step = ~4.5s per cycle)
+      // Simulation steps (40ms per step, 100 steps total = 4.0s per cycle)
+      // Phase 1 (1..50): Kompresi points 1 -> 1700 (34 points/step)
+      // Phase 2 (51..100): Tension points 1700 -> 1 (34 points/step)
       intervalId = setInterval(() => {
         stepIdx += 1;
 
-        if (stepIdx <= 14) {
-          // Phase 1: Kompresi (Stroke 0 -> 84 mm)
-          const currentStroke = STROKE_LABELS[stepIdx];
-          const currentLoad = target.compression[stepIdx];
-          const pct = Math.round((stepIdx / 28) * 100);
+        if (stepIdx <= 50) {
+          // Phase 1: Kompresi (Point 1 -> 1700)
+          const revealedPoints = Math.min(TOTAL_POINTS, stepIdx * 34);
+          const currentStroke = revealedPoints;
+          const currentLoad = target.compression[revealedPoints - 1];
+          const pct = Math.round((stepIdx / 100) * 100);
 
           setCycles((prev) => {
             const next = [...prev];
             if (!next[currentCycle]) return prev;
             const current = { ...next[currentCycle] };
-            current.compression = [...current.compression];
-            current.compression[stepIdx] = currentLoad;
-            if (stepIdx === 14) {
+            const newComp = [...current.compression];
+            for (let k = 0; k < revealedPoints; k++) {
+              newComp[k] = target.compression[k];
+            }
+            current.compression = newComp;
+            if (stepIdx === 50) {
               current.rebound = [...current.rebound];
-              current.rebound[14] = target.rebound[14];
+              current.rebound[TOTAL_POINTS - 1] = target.rebound[TOTAL_POINTS - 1];
             }
             next[currentCycle] = current;
             return next;
@@ -398,21 +575,26 @@ export default function TestingProcessPage({
             load: currentLoad,
             loadCompression: currentLoad,
             loadForce: Math.round(currentLoad * 0.8),
-            frictionForce: Math.round(20 + stepIdx * 10)
+            frictionForce: Math.round(20 + (stepIdx / 50) * 180)
           }));
-        } else if (stepIdx <= 28) {
-          // Phase 2: Tension / Rebound (Stroke 84 -> 0 mm)
-          const rebStrokeIdx = 28 - stepIdx;
-          const currentStroke = STROKE_LABELS[rebStrokeIdx];
-          const currentLoad = target.rebound[rebStrokeIdx];
-          const pct = Math.round((stepIdx / 28) * 100);
+        } else if (stepIdx <= 100) {
+          // Phase 2: Tension / Rebound (Point 1700 -> 1)
+          const rebStep = stepIdx - 50; // 1 to 50
+          const rebRevealedCount = rebStep * 34;
+          const startRebIdx = Math.max(0, TOTAL_POINTS - rebRevealedCount);
+          const currentStroke = startRebIdx + 1;
+          const currentLoad = target.rebound[startRebIdx];
+          const pct = Math.round((stepIdx / 100) * 100);
 
           setCycles((prev) => {
             const next = [...prev];
             if (!next[currentCycle]) return prev;
             const current = { ...next[currentCycle] };
-            current.rebound = [...current.rebound];
-            current.rebound[rebStrokeIdx] = currentLoad;
+            const newReb = [...current.rebound];
+            for (let k = startRebIdx; k < TOTAL_POINTS; k++) {
+              newReb[k] = target.rebound[k];
+            }
+            current.rebound = newReb;
             next[currentCycle] = current;
             return next;
           });
@@ -422,9 +604,9 @@ export default function TestingProcessPage({
             ...prev,
             stroke: currentStroke,
             load: currentLoad,
-            loadCompression: target.compression[rebStrokeIdx],
+            loadCompression: target.compression[startRebIdx],
             loadForce: currentLoad,
-            frictionForce: Math.max(10, Math.round(target.compression[rebStrokeIdx] - currentLoad))
+            frictionForce: Math.max(10, Math.round(target.compression[startRebIdx] - currentLoad))
           }));
         } else {
           // Cycle completed
@@ -432,11 +614,24 @@ export default function TestingProcessPage({
           setIsRunning(false);
           setProgress(100);
 
-          const finalStroke = parseFloat(strokeValRef.current) || 84.5;
+          // Pastikan seluruh 1700 titik kurva terisi lengkap
+          setCycles((prev) => {
+            const next = [...prev];
+            if (next[currentCycle]) {
+              next[currentCycle] = {
+                ...next[currentCycle],
+                compression: [...target.compression],
+                rebound: [...target.rebound]
+              };
+            }
+            return next;
+          });
+
+          const finalStroke = parseFloat(strokeValRef.current) || 1700;
           const loads = calculateStrokeLoads(finalStroke, currentCycle);
           const finalCycleMetrics = {
             stroke: finalStroke,
-            load: target.compression[14] || 1090,
+            load: target.compression[TOTAL_POINTS - 1] || 1090,
             loadCompression: loads.compression,
             loadForce: loads.tension,
             frictionForce: loads.friction
@@ -497,7 +692,7 @@ export default function TestingProcessPage({
             });
           }
         }
-      }, 160);
+      }, 40);
     }
 
     return () => {
@@ -513,7 +708,7 @@ export default function TestingProcessPage({
     const found = models.find((m) => m.model === val);
     if (found) {
       setSpeed(found.speed !== undefined ? String(found.speed) : '500');
-      setStroke(found.stroke !== undefined ? String(found.stroke) : '84.5');
+      setStroke(found.stroke !== undefined ? String(found.stroke) : '1700');
       setAngle(found.angle !== undefined ? String(found.angle) : '45');
     }
   };
@@ -560,7 +755,7 @@ export default function TestingProcessPage({
     }
 
     if (!speed) setSpeed('500');
-    if (!stroke) setStroke('84.5');
+    if (!stroke) setStroke('1700');
     if (!angle) setAngle('45');
 
     const totalWarmUps = parsedWarmUps;
@@ -577,8 +772,8 @@ export default function TestingProcessPage({
         name: info.name,
         isWarmUp: info.isWarmUp,
         color: info.color,
-        compression: Array(16).fill(null),
-        rebound: Array(16).fill(null),
+        compression: Array(TOTAL_POINTS).fill(null),
+        rebound: Array(TOTAL_POINTS).fill(null),
         metrics: null
       };
       if (i === 0) {
@@ -671,8 +866,8 @@ export default function TestingProcessPage({
 
     const warmUpsNum = parseInt(warmingUpCount) || 1;
     const actualTestCycle = cycles[warmUpsNum] || cycles[cycles.length - 1] || {
-      compression: Array(16).fill(0),
-      rebound: Array(16).fill(0)
+      compression: Array(TOTAL_POINTS).fill(0),
+      rebound: Array(TOTAL_POINTS).fill(0)
     };
 
     const newRecord = {
@@ -686,12 +881,12 @@ export default function TestingProcessPage({
           minute: '2-digit'
         }),
       speed: speed || 500,
-      stroke: stroke || 84.5,
+      stroke: stroke || 1700,
       angle: angle || 45,
       warmingUpCount: warmUpsNum,
       trialsCount: 1, // Only 1 actual test after warming up!
       metrics: {
-        stroke: parseFloat(stroke) || 84.5,
+        stroke: parseFloat(stroke) || 1700,
         load: metrics.load || 1090,
         loadCompression: computedLoads.compression,
         loadForce: computedLoads.tension,
@@ -811,13 +1006,13 @@ export default function TestingProcessPage({
       ['Generated At', new Date().toLocaleString()],
       ['Model', selectedModel || 'SKA01-20-110'],
       ['Speed (mm/min)', speed || '500'],
-      ['Stroke (mm)', stroke || '84.5'],
+      ['Stroke (mm)', stroke || '1700'],
       ['Angle (deg)', angle || '45'],
       ['Warming Up Count', warmingUpCount || '1'],
       ['Status', 'Completed (1x Testing after Warming Up)'],
       [],
       ['PARAMETER HASIL PENGUJIAN AKTUAL'],
-      ['Stroke (mm)', stroke || '84.5'],
+      ['Stroke (mm)', stroke || '1700'],
       ['Load (N)', metrics.load],
       ['Load (N) Compression', computedLoads.compression],
       ['Load (N) Tension', computedLoads.tension],
@@ -869,13 +1064,14 @@ export default function TestingProcessPage({
     // State awal sebelum pengujian dimulai: sediakan placeholder kurva Testing agar sumbu grafik ter-render rapi
     chartDatasets.push({
       label: 'Compression',
-      data: Array(16).fill(null),
+      data: Array(TOTAL_POINTS).fill(null),
       borderColor: COMPRESSION_COLOR,
       backgroundColor: COMPRESSION_COLOR,
       borderWidth: 2,
       tension: 0.35,
-      pointRadius: 3,
-      pointHoverRadius: 6,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHitRadius: 6,
       pointBackgroundColor: COMPRESSION_COLOR,
       pointBorderColor: '#ffffff',
       pointBorderWidth: 1.5,
@@ -886,13 +1082,14 @@ export default function TestingProcessPage({
     });
     chartDatasets.push({
       label: 'Tension',
-      data: Array(16).fill(null),
+      data: Array(TOTAL_POINTS).fill(null),
       borderColor: TENSION_COLOR,
       backgroundColor: TENSION_COLOR,
       borderWidth: 2,
       tension: 0.35,
-      pointRadius: 3,
-      pointHoverRadius: 6,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHitRadius: 6,
       pointBackgroundColor: TENSION_COLOR,
       pointBorderColor: '#ffffff',
       pointBorderWidth: 1.5,
@@ -930,8 +1127,9 @@ export default function TestingProcessPage({
         backgroundColor: compColor,
         borderWidth: 2,
         tension: 0.35,
-        pointRadius: 3,
-        pointHoverRadius: 6,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHitRadius: 6,
         pointBackgroundColor: compColor,
         pointBorderColor: '#ffffff',
         pointBorderWidth: 1.5,
@@ -949,8 +1147,9 @@ export default function TestingProcessPage({
         backgroundColor: tensColor,
         borderWidth: 2,
         tension: 0.35,
-        pointRadius: 3,
-        pointHoverRadius: 6,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHitRadius: 6,
         pointBackgroundColor: tensColor,
         pointBorderColor: '#ffffff',
         pointBorderWidth: 1.5,
@@ -981,7 +1180,7 @@ export default function TestingProcessPage({
     if (tooltip.body) {
       let innerHtml = `
         <div style="text-align: center; font-weight: 700; font-size: 11px; color: #101828; margin-bottom: 8px;">
-          Testing Value
+          Titik: ${tooltip.dataPoints[0]?.label ?? ''}
         </div>
         <div style="display: flex; flex-direction: column; gap: 5px;">
       `;
@@ -1040,16 +1239,6 @@ export default function TestingProcessPage({
     }
   };
 
-  // Zoom bounds calculation
-  const xSpan = 90 / zoomLevel;
-  const xMin = Math.max(0, 45 - xSpan / 2);
-  const xMax = Math.min(90, 45 + xSpan / 2);
-
-  const yCenter = 700;
-  const ySpan = 1600 / zoomLevel;
-  const yMin = Math.round(yCenter - ySpan / 2);
-  const yMax = Math.round(yCenter + ySpan / 2);
-
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -1057,6 +1246,14 @@ export default function TestingProcessPage({
     interaction: {
       mode: 'index',
       intersect: false
+    },
+    layout: {
+      padding: {
+        top: 8,
+        right: 28, // Ruang khusus 28px agar lengkungan transisi di titik 1700 terlihat utuh
+        left: 4,
+        bottom: 4
+      }
     },
     plugins: {
       legend: {
@@ -1102,11 +1299,11 @@ export default function TestingProcessPage({
     },
     scales: {
       x: {
-        min: 0,
-        max: 90,
+        min: zoomLevel > 1.0 ? panRef.current.xMin : undefined,
+        max: zoomLevel > 1.0 ? panRef.current.xMax : undefined,
         title: {
           display: true,
-          text: 'Disp. (mm)',
+          text: 'Data Point (1 - 1700)',
           color: '#4C4E67',
           font: { size: 12, weight: '500' }
         },
@@ -1115,13 +1312,15 @@ export default function TestingProcessPage({
           color: '#F2F4F7'
         },
         ticks: {
+          autoSkip: true,
+          maxTicksLimit: zoomLevel > 2.0 ? 24 : (zoomLevel > 1.3 ? 18 : 14),
           color: '#475467',
           font: { size: 11 }
         }
       },
       y: {
-        min: -100,
-        max: 1500,
+        min: zoomLevel > 1.0 ? panRef.current.yMin : -100,
+        max: zoomLevel > 1.0 ? panRef.current.yMax : 1500,
         title: {
           display: true,
           text: 'Force (N)',
@@ -1129,7 +1328,7 @@ export default function TestingProcessPage({
           font: { size: 12, weight: '500' }
         },
         ticks: {
-          stepSize: 100,
+          stepSize: zoomLevel > 2.5 ? 25 : (zoomLevel > 1.5 ? 50 : 100),
           color: '#475467',
           font: { size: 10 }
         },
@@ -1263,7 +1462,7 @@ export default function TestingProcessPage({
                     value={stroke}
                     onChange={(e) => setStroke(e.target.value)}
                     disabled={isModelLocked || isOperator}
-                    placeholder="Input parameter stroke (e.g. 20)"
+                    placeholder="Input parameter stroke (e.g. 1700)"
                     className="w-full px-3 py-2 border border-[#D0D5DD] rounded-md text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-500 disabled:bg-gray-100 disabled:text-gray-500"
                   />
                 </div>
@@ -1464,16 +1663,9 @@ export default function TestingProcessPage({
               {/* Header with Title and Zoom Controls (Image 2) */}
               <div className="mb-2 flex items-start justify-between flex-wrap gap-2">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-[#1E232F]">
-                      Testing Monitoring
-                    </h2>
-                    {zoomLevel > 1.0 && (
-                      <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                        Zoom {zoomLevel}x
-                      </span>
-                    )}
-                  </div>
+                  <h2 className="text-base font-bold text-[#1E232F]">
+                    Testing Monitoring
+                  </h2>
                   <p className="text-[11px] text-gray-500">
                     {isWarmingUpFinished
                       ? `Monitor product testing performance in realtime`
@@ -1482,34 +1674,42 @@ export default function TestingProcessPage({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {/* Zoom Controls exact match to Image 1: Reset (RotateCcw), Zoom Out (MinusCircle), Zoom In (PlusCircle) */}
-                  <div className="flex items-center gap-1 text-gray-500">
-                    <button
-                      type="button"
-                      onClick={handleResetZoom}
-                      className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                      title="Reset Zoom"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleZoomOut}
-                      disabled={zoomLevel <= 1.0}
-                      className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
-                      title="Zoom Out"
-                    >
-                      <MinusCircle className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleZoomIn}
-                      disabled={zoomLevel >= 3.0}
-                      className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
-                      title="Zoom In"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                    </button>
+                  {/* Zoom Controls with percentage badge placed directly next to reset, zoom out, zoom in */}
+                  <div className="flex items-center gap-2">
+                    {zoomLevel > 1.0 && (
+                      <span className="text-xs font-bold text-[#00A854] bg-[#E8F8F0] px-2.5 py-0.5 rounded-full border border-[#B0E9CF]">
+                        {Math.round(zoomLevel * 100)}%
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-1 text-gray-500">
+                      <button
+                        type="button"
+                        onClick={handleResetZoom}
+                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                        title="Reset Zoom"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleZoomOut}
+                        disabled={zoomLevel <= 1.0}
+                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                        title="Zoom Out"
+                      >
+                        <MinusCircle className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleZoomIn}
+                        disabled={zoomLevel >= 3.0}
+                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                        title="Zoom In"
+                      >
+                        <PlusCircle className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Single Unified Detail Button matching Image 1 */}
@@ -1523,30 +1723,47 @@ export default function TestingProcessPage({
                 </div>
               </div>
 
-              {/* Chart Area with scrollbar when data/zoom is larger than normal */}
-              <div className="w-full flex-1 min-h-[300px] xl:min-h-[360px] overflow-x-auto overflow-y-hidden relative chart-scrollbar rounded-lg pb-1">
+
+              {/* Chart Area with scrollbar only when data/zoom is larger than normal */}
+              <div
+                ref={chartScrollContainerRef}
+                onScroll={handleScroll}
+                className={`w-full flex-1 min-h-[300px] xl:min-h-[360px] relative rounded-lg ${
+                  zoomLevel > 1.0 ? 'overflow-auto chart-scrollbar' : 'overflow-hidden'
+                }`}
+              >
+                {/* Virtual spacer that creates the scrollable track */}
                 <div
-                  className="h-full min-h-[300px] xl:min-h-[360px] relative transition-all duration-150"
                   style={{
                     width: zoomLevel > 1.0 ? `${Math.round(zoomLevel * 100)}%` : '100%',
-                    minWidth: zoomLevel > 1.0 ? `${Math.round(zoomLevel * 720)}px` : '100%'
+                    height: zoomLevel > 1.0 ? `${Math.round(zoomLevel * 100)}%` : '100%',
+                    position: 'relative'
                   }}
                 >
-                  <Line
-                    ref={chartRef}
-                    data={chartData}
-                    options={chartOptions}
-                    plugins={[verticalLinePlugin, transitionLinePlugin]}
-                  />
-
-                  {/* Floating Custom Tooltip Container */}
+                  {/* Pinned chart container that stays locked to top-0 left-0 of the visible scroll window */}
                   <div
-                    ref={tooltipRef}
-                    className="pointer-events-none absolute z-20 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 shadow-lg transition-all duration-75 opacity-0 min-w-[140px] whitespace-nowrap"
+                    className="sticky top-0 left-0 w-full h-full"
                     style={{
-                      boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
+                      width: containerBaseWidth ? `${containerBaseWidth}px` : '100%',
+                      height: containerBaseHeight ? `${containerBaseHeight}px` : '100%'
                     }}
-                  />
+                  >
+                    <Line
+                      ref={chartRef}
+                      data={chartData}
+                      options={chartOptions}
+                      plugins={[verticalLinePlugin, transitionLinePlugin]}
+                    />
+
+                    {/* Floating Custom Tooltip Container */}
+                    <div
+                      ref={tooltipRef}
+                      className="pointer-events-none absolute z-20 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 shadow-lg transition-all duration-75 opacity-0 min-w-[140px] whitespace-nowrap"
+                      style={{
+                        boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1808,7 +2025,7 @@ export default function TestingProcessPage({
             <div>
               <span className="text-gray-400">Stroke:</span>{' '}
               <span className="font-semibold text-gray-800">
-                {stroke || 84.5} mm
+                {stroke || 1700} mm
               </span>
             </div>
             <div>
@@ -1832,7 +2049,7 @@ export default function TestingProcessPage({
             <div className="grid grid-cols-5 gap-2.5 text-center text-xs">
               <div className="border border-gray-200 rounded-lg p-2 bg-[#FAFAFA]">
                 <p className="text-[10px] text-gray-400">Stroke</p>
-                <p className="font-bold text-gray-800 mt-0.5">{stroke || 84.5}</p>
+                <p className="font-bold text-gray-800 mt-0.5">{stroke || 1700}</p>
               </div>
               <div className="border border-gray-200 rounded-lg p-2 bg-[#FAFAFA]">
                 <p className="text-[10px] text-gray-400">Load</p>
@@ -1922,7 +2139,7 @@ export default function TestingProcessPage({
                 </div>
                 <div className="border border-[#D0D5DD] rounded-lg py-2 px-2 text-center bg-white">
                   <p className="text-[11px] text-[#344054]">Stroke</p>
-                  <p className="text-xs font-bold text-[#101828] mt-0.5">{stroke || 84.5} mm</p>
+                  <p className="text-xs font-bold text-[#101828] mt-0.5">{stroke || 1700} mm</p>
                 </div>
                 <div className="border border-[#D0D5DD] rounded-lg py-2 px-2 text-center bg-white">
                   <p className="text-[11px] text-[#344054]">Angle</p>
@@ -1942,7 +2159,7 @@ export default function TestingProcessPage({
               <div className="grid grid-cols-5 gap-2">
                 <div className="border border-[#D0D5DD] rounded-lg py-2 px-1 text-center bg-white">
                   <p className="text-[10px] text-[#344054]">Stroke</p>
-                  <p className="text-xs font-bold text-[#101828] mt-0.5">{stroke || 84.5}</p>
+                  <p className="text-xs font-bold text-[#101828] mt-0.5">{stroke || 1700}</p>
                 </div>
                 <div className="border border-[#D0D5DD] rounded-lg py-2 px-1 text-center bg-white">
                   <p className="text-[10px] text-[#344054]">Load</p>

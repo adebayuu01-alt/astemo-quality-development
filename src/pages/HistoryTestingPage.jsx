@@ -74,7 +74,105 @@ const verticalLinePlugin = {
   }
 };
 
-const STROKE_LABELS = [0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90];
+const TOTAL_POINTS = 1700;
+const STROKE_LABELS = Array.from({ length: TOTAL_POINTS }, (_, i) => i + 1);
+
+// Plugin: Menggambar kurva transisi dari puncak Kompresi ke awal Tensi di titik balik 1700
+const transitionLinePlugin = {
+  id: 'transitionLineHistory',
+  afterDatasetsDraw: (chart) => {
+    const datasets = chart.data.datasets;
+    if (!datasets || datasets.length < 2) return;
+
+    for (let c = 0; c < datasets.length; c += 2) {
+      const compIdx = c;
+      const tensIdx = c + 1;
+      if (tensIdx >= datasets.length) break;
+      if (!chart.isDatasetVisible(compIdx) || !chart.isDatasetVisible(tensIdx)) continue;
+
+      let peakIdx = -1;
+      for (let i = STROKE_LABELS.length - 1; i >= 0; i--) {
+        const val = datasets[compIdx].data?.[i];
+        if (val !== null && val !== undefined) {
+          peakIdx = i;
+          break;
+        }
+      }
+      if (peakIdx === -1) continue;
+
+      const tensVal = datasets[tensIdx].data?.[peakIdx];
+      if (tensVal === null || tensVal === undefined) continue;
+
+      const compMeta = chart.getDatasetMeta(compIdx);
+      const tensMeta = chart.getDatasetMeta(tensIdx);
+
+      const ptComp = compMeta?.data?.[peakIdx];
+      const ptTens = tensMeta?.data?.[peakIdx];
+
+      const compVal = datasets[compIdx].data[peakIdx];
+      const tensValNum = datasets[tensIdx].data[peakIdx];
+
+      const x1 = (ptComp && typeof ptComp.x === 'number' && !isNaN(ptComp.x))
+        ? ptComp.x
+        : chart.scales.x.getPixelForValue(peakIdx);
+
+      const y1 = (ptComp && typeof ptComp.y === 'number' && !isNaN(ptComp.y))
+        ? ptComp.y
+        : chart.scales.y.getPixelForValue(compVal);
+
+      const x2 = (ptTens && typeof ptTens.x === 'number' && !isNaN(ptTens.x))
+        ? ptTens.x
+        : chart.scales.x.getPixelForValue(peakIdx);
+
+      const y2 = (ptTens && typeof ptTens.y === 'number' && !isNaN(ptTens.y))
+        ? ptTens.y
+        : chart.scales.y.getPixelForValue(tensValNum);
+
+      if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) continue;
+
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+
+      const dy = y2 - y1;
+      const bulge = Math.max(6, Math.min(14, Math.abs(dy) * 0.12));
+
+      const ctrlX1 = x1 + bulge;
+      const ctrlY1 = y1 + dy * 0.22;
+      const ctrlX2 = x2 + bulge;
+      const ctrlY2 = y2 - dy * 0.22;
+
+      ctx.bezierCurveTo(ctrlX1, ctrlY1, ctrlX2, ctrlY2, x2, y2);
+
+      const compColor = datasets[compIdx].borderColor || '#EF4444';
+      const tensColor = datasets[tensIdx].borderColor || '#7C3AED';
+      const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+      grad.addColorStop(0, compColor);
+      grad.addColorStop(0.35, '#E11D48');
+      grad.addColorStop(0.7, '#8B5CF6');
+      grad.addColorStop(1, tensColor);
+
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = Math.max(2, datasets[compIdx].borderWidth || 2);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(x1, y1, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = compColor;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(x2, y2, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = tensColor;
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+};
 
 const TRIAL_COLORS = [
   '#FF4D4F',
@@ -104,10 +202,101 @@ export default function HistoryTestingPage({
   const [toast, setToast] = useState(null);
   const [historyZoomLevel, setHistoryZoomLevel] = useState(1.0);
   const modalTooltipRef = useRef(null);
+  const historyChartScrollContainerRef = useRef(null);
+  const historyChartRef = useRef(null);
+  const historyPanRef = useRef({
+    xMin: undefined,
+    xMax: undefined,
+    yMin: -100,
+    yMax: 1500
+  });
+  const historyScrollRafRef = useRef(null);
 
-  const handleZoomInHistory = () => setHistoryZoomLevel((prev) => Math.min(3.0, +(prev + 0.35).toFixed(2)));
-  const handleZoomOutHistory = () => setHistoryZoomLevel((prev) => Math.max(1.0, +(prev - 0.35).toFixed(2)));
+  const handleZoomInHistory = () => setHistoryZoomLevel((prev) => Math.min(3.0, +(prev + 0.25).toFixed(2)));
+  const handleZoomOutHistory = () => setHistoryZoomLevel((prev) => Math.max(1.0, +(prev - 0.25).toFixed(2)));
   const handleResetHistoryZoom = () => setHistoryZoomLevel(1.0);
+
+  const updateHistoryPanFromScroll = (scrollEl, level) => {
+    if (!scrollEl || level <= 1.0) {
+      historyPanRef.current = {
+        xMin: undefined,
+        xMax: undefined,
+        yMin: -100,
+        yMax: 1500
+      };
+      if (historyChartRef.current?.options?.scales) {
+        historyChartRef.current.options.scales.x.min = undefined;
+        historyChartRef.current.options.scales.x.max = undefined;
+        historyChartRef.current.options.scales.y.min = -100;
+        historyChartRef.current.options.scales.y.max = 1500;
+        if (historyChartRef.current.options.scales.y.ticks) {
+          historyChartRef.current.options.scales.y.ticks.stepSize = 100;
+        }
+        historyChartRef.current.update('none');
+      }
+      return;
+    }
+
+    const maxScrollLeft = scrollEl.scrollWidth - scrollEl.clientWidth;
+    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
+    const xRatio = maxScrollLeft > 0 ? scrollEl.scrollLeft / maxScrollLeft : 0.5;
+    const yRatio = maxScrollTop > 0 ? scrollEl.scrollTop / maxScrollTop : 0.5;
+
+    const visiblePoints = Math.max(50, Math.round(TOTAL_POINTS / level));
+    const maxOffset = TOTAL_POINTS - visiblePoints;
+    const xMin = Math.max(0, Math.min(maxOffset, Math.round(xRatio * maxOffset)));
+    const xMax = Math.min(TOTAL_POINTS - 1, xMin + visiblePoints - 1);
+
+    const totalYRange = 1600; // -100 to 1500
+    const visibleYRange = Math.max(100, Math.round(totalYRange / level));
+    const maxYOffset = totalYRange - visibleYRange;
+    const yMax = Math.round(1500 - yRatio * maxYOffset);
+    const yMin = yMax - visibleYRange;
+
+    const stepSize = level > 2.5 ? 25 : (level > 1.5 ? 50 : 100);
+
+    historyPanRef.current = { xMin, xMax, yMin, yMax };
+
+    if (historyChartRef.current?.options?.scales) {
+      historyChartRef.current.options.scales.x.min = xMin;
+      historyChartRef.current.options.scales.x.max = xMax;
+      historyChartRef.current.options.scales.y.min = yMin;
+      historyChartRef.current.options.scales.y.max = yMax;
+      if (historyChartRef.current.options.scales.y.ticks) {
+        historyChartRef.current.options.scales.y.ticks.stepSize = stepSize;
+      }
+      historyChartRef.current.update('none');
+    }
+  };
+
+  const handleHistoryScroll = (e) => {
+    if (historyZoomLevel <= 1.0) return;
+    const el = e.currentTarget;
+    if (historyScrollRafRef.current) cancelAnimationFrame(historyScrollRafRef.current);
+    historyScrollRafRef.current = requestAnimationFrame(() => {
+      updateHistoryPanFromScroll(el, historyZoomLevel);
+    });
+  };
+
+  useEffect(() => {
+    if (!historyChartScrollContainerRef.current) return;
+    const el = historyChartScrollContainerRef.current;
+
+    if (historyZoomLevel <= 1.0) {
+      el.scrollLeft = 0;
+      el.scrollTop = 0;
+      updateHistoryPanFromScroll(el, 1.0);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const maxScrollLeft = el.scrollWidth - el.clientWidth;
+      const maxScrollTop = el.scrollHeight - el.clientHeight;
+      el.scrollLeft = maxScrollLeft / 2;
+      el.scrollTop = maxScrollTop / 2;
+      updateHistoryPanFromScroll(el, historyZoomLevel);
+    });
+  }, [historyZoomLevel]);
 
   // Custom Tooltip HTML matching Testing Process Page exactly
   const customModalTooltipHandler = (context) => {
@@ -123,7 +312,7 @@ export default function HistoryTestingPage({
     if (tooltip.body) {
       let innerHtml = `
         <div style="text-align: center; font-weight: 700; font-size: 11px; color: #101828; margin-bottom: 8px;">
-          Testing Value
+          Titik: ${tooltip.dataPoints[0]?.label ?? ''}
         </div>
         <div style="display: flex; flex-direction: column; gap: 5px;">
       `;
@@ -191,6 +380,14 @@ export default function HistoryTestingPage({
       mode: 'index',
       intersect: false
     },
+    layout: {
+      padding: {
+        top: 8,
+        right: 28, // Ruang khusus 28px agar lengkungan transisi di titik 1700 terlihat utuh
+        left: 4,
+        bottom: 4
+      }
+    },
     plugins: {
       legend: {
         position: 'bottom',
@@ -248,11 +445,11 @@ export default function HistoryTestingPage({
     },
     scales: {
       x: {
-        min: 0,
-        max: 90,
+        min: historyZoomLevel > 1.0 ? historyPanRef.current.xMin : undefined,
+        max: historyZoomLevel > 1.0 ? historyPanRef.current.xMax : undefined,
         title: {
           display: true,
-          text: 'Disp. (mm)',
+          text: 'Data Point (1 - 1700)',
           color: '#4C4E67',
           font: { size: 12, weight: '500' }
         },
@@ -261,13 +458,15 @@ export default function HistoryTestingPage({
           color: '#F2F4F7'
         },
         ticks: {
+          autoSkip: true,
+          maxTicksLimit: historyZoomLevel > 2.0 ? 24 : (historyZoomLevel > 1.3 ? 18 : 14),
           color: '#475467',
           font: { size: 10 }
         }
       },
       y: {
-        min: historyZoomLevel > 1.0 ? Math.max(-100, Math.round(700 - (800 / historyZoomLevel))) : -100,
-        max: historyZoomLevel > 1.0 ? Math.min(1500, Math.round(700 + (800 / historyZoomLevel))) : 1500,
+        min: historyZoomLevel > 1.0 ? historyPanRef.current.yMin : -100,
+        max: historyZoomLevel > 1.0 ? historyPanRef.current.yMax : 1500,
         title: {
           display: true,
           text: 'Force (N)',
@@ -275,7 +474,7 @@ export default function HistoryTestingPage({
           font: { size: 12, weight: '500' }
         },
         ticks: {
-          stepSize: historyZoomLevel > 1.5 ? 50 : 100,
+          stepSize: historyZoomLevel > 2.5 ? 25 : (historyZoomLevel > 1.5 ? 50 : 100),
           color: '#475467',
           font: { size: 10 }
         },
@@ -292,36 +491,44 @@ export default function HistoryTestingPage({
     const cd = record.chartData;
 
     if (cd.trials && cd.trials.length > 0) {
+      const isSingle = cd.trials.length === 1;
       return cd.trials.flatMap((tData, i) => {
-        const color = TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854';
+        const compColor = isSingle ? '#EF4444' : (TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854');
+        const tensColor = isSingle ? '#7C3AED' : (TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854');
         return [
           {
-            label: `Testing ${i + 1} - Compression (data saat naik)`,
+            label: isSingle ? 'Compression (Menekan Shock)' : `Testing ${i + 1} - Compression`,
             data: tData.compression,
-            borderColor: color,
-            backgroundColor: color,
+            borderColor: compColor,
+            backgroundColor: compColor,
             borderWidth: 2,
             tension: 0.35,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: color,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHitRadius: 6,
+            pointBackgroundColor: compColor,
             pointBorderColor: '#ffffff',
             pointBorderWidth: 1.5,
-            spanGaps: false
+            spanGaps: false,
+            isCompression: true,
+            cycleIndex: i
           },
           {
-            label: `Testing ${i + 1} - Tension (data saat turun)`,
+            label: isSingle ? 'Tension (Menarik Shock)' : `Testing ${i + 1} - Tension`,
             data: tData.rebound,
-            borderColor: color,
-            backgroundColor: color,
+            borderColor: tensColor,
+            backgroundColor: tensColor,
             borderWidth: 2,
             tension: 0.35,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: color,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHitRadius: 6,
+            pointBackgroundColor: tensColor,
             pointBorderColor: '#ffffff',
             pointBorderWidth: 1.5,
-            spanGaps: false
+            spanGaps: false,
+            isTension: true,
+            cycleIndex: i
           }
         ];
       });
@@ -330,72 +537,85 @@ export default function HistoryTestingPage({
     if (cd.cycles && cd.cycles.length > 0) {
       const testCycles = cd.cycles.filter((c) => !c.isWarmUp);
       const cyclesToRender = testCycles.length > 0 ? testCycles : cd.cycles;
+      const isSingle = cyclesToRender.length === 1;
       return cyclesToRender.flatMap((c, i) => {
-        const color = c.color || TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854';
-        const cycleName = c.name || `Testing ${c.cycleNum || i + 1}`;
+        const compColor = isSingle ? '#EF4444' : (c.color || TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854');
+        const tensColor = isSingle ? '#7C3AED' : (c.color || TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854');
+        const cycleName = isSingle ? '' : (c.name || `Testing ${c.cycleNum || i + 1}`);
         return [
           {
-            label: `${cycleName} - Compression (data saat naik)`,
+            label: isSingle ? 'Compression (Menekan Shock)' : `${cycleName} - Compression`,
             data: c.compression,
-            borderColor: color,
-            backgroundColor: color,
+            borderColor: compColor,
+            backgroundColor: compColor,
             borderWidth: 2,
             tension: 0.35,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: color,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHitRadius: 6,
+            pointBackgroundColor: compColor,
             pointBorderColor: '#ffffff',
             pointBorderWidth: 1.5,
-            spanGaps: false
+            spanGaps: false,
+            isCompression: true,
+            cycleIndex: i
           },
           {
-            label: `${cycleName} - Tension (data saat turun)`,
+            label: isSingle ? 'Tension (Menarik Shock)' : `${cycleName} - Tension`,
             data: c.rebound,
-            borderColor: color,
-            backgroundColor: color,
+            borderColor: tensColor,
+            backgroundColor: tensColor,
             borderWidth: 2,
             tension: 0.35,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: color,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHitRadius: 6,
+            pointBackgroundColor: tensColor,
             pointBorderColor: '#ffffff',
             pointBorderWidth: 1.5,
-            spanGaps: false
+            spanGaps: false,
+            isTension: true,
+            cycleIndex: i
           }
         ];
       });
     }
 
     if (cd.compression && cd.rebound) {
-      const color = TRIAL_COLORS[0];
       return [
         {
-          label: 'Testing 1 - Compression (data saat naik)',
+          label: 'Compression (Menekan Shock)',
           data: cd.compression,
-          borderColor: color,
-          backgroundColor: color,
+          borderColor: '#EF4444',
+          backgroundColor: '#EF4444',
           borderWidth: 2,
           tension: 0.35,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: color,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointHitRadius: 6,
+          pointBackgroundColor: '#EF4444',
           pointBorderColor: '#ffffff',
           pointBorderWidth: 1.5,
-          spanGaps: false
+          spanGaps: false,
+          isCompression: true,
+          cycleIndex: 0
         },
         {
-          label: 'Testing 1 - Tension (data saat turun)',
+          label: 'Tension (Menarik Shock)',
           data: cd.rebound,
-          borderColor: color,
-          backgroundColor: color,
+          borderColor: '#7C3AED',
+          backgroundColor: '#7C3AED',
           borderWidth: 2,
           tension: 0.35,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: color,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointHitRadius: 6,
+          pointBackgroundColor: '#7C3AED',
           pointBorderColor: '#ffffff',
           pointBorderWidth: 1.5,
-          spanGaps: false
+          spanGaps: false,
+          isTension: true,
+          cycleIndex: 0
         }
       ];
     }
@@ -405,13 +625,14 @@ export default function HistoryTestingPage({
     return [
       {
         label: 'Testing 1 - Compression (data saat naik)',
-        data: cd.s1 || [0, 160, 210, 250, 290, 330, 375, 425, 485, 560, 650, 760, 890, 1030, 1090, null],
+        data: cd.s1 || [],
         borderColor: color,
         backgroundColor: color,
         borderWidth: 2,
         tension: 0.35,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHitRadius: 6,
         pointBackgroundColor: color,
         pointBorderColor: '#ffffff',
         pointBorderWidth: 1.5,
@@ -419,13 +640,14 @@ export default function HistoryTestingPage({
       },
       {
         label: 'Testing 1 - Tension (data saat turun)',
-        data: cd.s2 || [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750, 890, 1090, null],
+        data: cd.s2 || [],
         borderColor: color,
         backgroundColor: color,
         borderWidth: 2,
         tension: 0.35,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHitRadius: 6,
         pointBackgroundColor: color,
         pointBorderColor: '#ffffff',
         pointBorderWidth: 1.5,
@@ -468,24 +690,24 @@ export default function HistoryTestingPage({
       ['Model', record.model],
       ['Testing Datetime', record.datetime],
       ['Speed (mm/min)', record.speed || 500],
-      ['Stroke (mm)', record.stroke || 20],
+      ['Stroke (mm)', record.stroke || 1700],
       ['Angle (deg)', record.angle || 45],
       ['Trials Count', record.trialsCount || (record.chartData?.cycles ? record.chartData.cycles.length : 1)],
       [],
       ['REALTIME PARAMETERS'],
-      ['Stroke (mm)', record.metrics?.stroke || 60],
-      ['Peak Load (N)', record.metrics?.load || 58],
-      ['Peak Load Compression (N)', record.metrics?.loadCompression || 58],
-      ['Peak Rebound Force (N)', record.metrics?.loadForce || 48.5],
-      ['Friction Force (N)', record.metrics?.frictionForce || 50]
+      ['Stroke (mm)', record.metrics?.stroke || 1700],
+      ['Peak Load (N)', record.metrics?.load || 1090],
+      ['Peak Load Compression (N)', record.metrics?.loadCompression || 1090],
+      ['Peak Rebound Force (N)', record.metrics?.loadForce || 890],
+      ['Friction Force (N)', record.metrics?.frictionForce || 200]
     ];
 
     if (record.chartData) {
       data.push([]);
-      data.push(['CHART DATA: FORCE (N) vs STROKE (mm)']);
+      data.push(['CHART DATA: FORCE (N) vs DATA POINTS (1 - 1700)']);
 
       if (record.chartData.cycles && record.chartData.cycles.length > 0) {
-        const header = ['Stroke (mm)'];
+        const header = ['Titik (1 - 1700)'];
         record.chartData.cycles.forEach((c, idx) => {
           const name = c.name || `Siklus ${c.cycleNum || idx + 1}`;
           header.push(`${name} - Compression (N)`);
@@ -502,7 +724,7 @@ export default function HistoryTestingPage({
           data.push(row);
         });
       } else if (record.chartData.compression && record.chartData.rebound) {
-        data.push(['Stroke (mm)', 'Fase Kompresi (N)', 'Fase Rebound (N)']);
+        data.push(['Titik (1 - 1700)', 'Fase Kompresi (N)', 'Fase Rebound (N)']);
         STROKE_LABELS.forEach((s, ptIdx) => {
           data.push([
             s,
@@ -522,7 +744,7 @@ export default function HistoryTestingPage({
             record.chartData.s5
           ].filter(Boolean);
 
-        const header = ['Stroke (mm)'];
+        const header = ['Titik (1 - 1700)'];
         trialList.forEach((_, idx) => header.push(`Testing ${idx + 1} (N)`));
         data.push(header);
 
@@ -777,61 +999,79 @@ export default function HistoryTestingPage({
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm text-[#344054] font-medium">Testing Curves</p>
-                    <div className="flex items-center gap-1 text-gray-500">
-                      <button
-                        type="button"
-                        onClick={handleResetHistoryZoom}
-                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                        title="Reset Zoom"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleZoomOutHistory}
-                        disabled={historyZoomLevel <= 1.0}
-                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
-                        title="Zoom Out"
-                      >
-                        <MinusCircle className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleZoomInHistory}
-                        disabled={historyZoomLevel >= 3.0}
-                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
-                        title="Zoom In"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="flex items-center gap-2">
+                      {historyZoomLevel > 1.0 && (
+                        <span className="text-xs font-bold text-[#00A854] bg-[#E8F8F0] px-2.5 py-0.5 rounded-full border border-[#B0E9CF]">
+                          {Math.round(historyZoomLevel * 100)}%
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1 text-gray-500">
+                        <button
+                          type="button"
+                          onClick={handleResetHistoryZoom}
+                          className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                          title="Reset Zoom"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleZoomOutHistory}
+                          disabled={historyZoomLevel <= 1.0}
+                          className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                          title="Zoom Out"
+                        >
+                          <MinusCircle className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleZoomInHistory}
+                          disabled={historyZoomLevel >= 3.0}
+                          className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                          title="Zoom In"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="border border-[#D0D5DD] rounded-xl p-3 bg-white">
-                    <div className="h-[280px] sm:h-[300px] w-full relative overflow-x-auto overflow-y-hidden chart-scrollbar rounded-lg">
+                    <div
+                      ref={historyChartScrollContainerRef}
+                      onScroll={handleHistoryScroll}
+                      className={`h-[280px] sm:h-[300px] w-full relative rounded-lg ${
+                        historyZoomLevel > 1.0 ? 'overflow-auto chart-scrollbar' : 'overflow-hidden'
+                      }`}
+                    >
+                      {/* Virtual spacer for scrollbar track */}
                       <div
-                        className="h-full min-h-[280px] sm:min-h-[300px] relative transition-all duration-150"
                         style={{
                           width: historyZoomLevel > 1.0 ? `${Math.round(historyZoomLevel * 100)}%` : '100%',
-                          minWidth: historyZoomLevel > 1.0 ? `${Math.round(historyZoomLevel * 680)}px` : '100%'
+                          height: historyZoomLevel > 1.0 ? `${Math.round(historyZoomLevel * 100)}%` : '100%',
+                          position: 'relative'
                         }}
                       >
-                        <Line
-                          data={{
-                            labels: STROKE_LABELS,
-                            datasets: getModalDatasets(viewRecord)
-                          }}
-                          options={modalChartOptions}
-                          plugins={[verticalLinePlugin]}
-                        />
+                        {/* Pinned chart locked to viewport */}
+                        <div className="sticky top-0 left-0 w-full h-full">
+                          <Line
+                            ref={historyChartRef}
+                            data={{
+                              labels: STROKE_LABELS,
+                              datasets: getModalDatasets(viewRecord)
+                            }}
+                            options={modalChartOptions}
+                            plugins={[verticalLinePlugin, transitionLinePlugin]}
+                          />
 
-                        {/* Floating Custom Tooltip Container matching Testing Process Page */}
-                        <div
-                          ref={modalTooltipRef}
-                          className="pointer-events-none absolute z-20 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 shadow-lg transition-all duration-75 opacity-0 min-w-[140px] whitespace-nowrap"
-                          style={{
-                            boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
-                          }}
-                        />
+                          {/* Floating Custom Tooltip Container matching Testing Process Page */}
+                          <div
+                            ref={modalTooltipRef}
+                            className="pointer-events-none absolute z-20 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 shadow-lg transition-all duration-75 opacity-0 min-w-[140px] whitespace-nowrap"
+                            style={{
+                              boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
