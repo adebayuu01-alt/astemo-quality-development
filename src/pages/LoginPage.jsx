@@ -1,45 +1,58 @@
 import React, { useState } from 'react';
-import { User, Lock, Eye, EyeOff } from 'lucide-react';
+import { CreditCard, ScanLine } from 'lucide-react';
 import astemoLogo from '../assets/astemo_logo.png';
 import Toast from '../components/Toast';
+import { INITIAL_USERS } from '../data/mockData';
 
 export default function LoginPage({ onLoginSuccess }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [cardId, setCardId] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isInvalid, setIsInvalid] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState(null);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const authenticateUser = (identifier) => {
     setIsInvalid(false);
     setErrorMsg('');
 
-    if (!username.trim() || !password.trim()) {
+    const trimmed = identifier.trim().toLowerCase();
+    if (!trimmed) {
       setIsInvalid(true);
-      setErrorMsg('Please enter both username and password.');
+      setErrorMsg('Silakan scan atau masukkan nomor ID Card.');
       return;
     }
 
-    // Default users from brief:
-    // 1. kevin_astemo : kevin12345
-    // 2. suep_astemo : suep12345
-    const valid =
-      (username === 'kevin_astemo' && password === 'kevin12345') ||
-      (username === 'suep_astemo' && password === 'suep12345');
+    // Match by ID Card or username
+    const matched = INITIAL_USERS.find(
+      (u) =>
+        u.idCard.toLowerCase() === trimmed ||
+        u.username.toLowerCase() === trimmed ||
+        (trimmed === 'kevin' && u.username === 'kevin_astemo') ||
+        (trimmed === 'suep' && u.username === 'suep_astemo')
+    );
 
-    if (!valid) {
+    if (!matched) {
       setIsInvalid(true);
-      setErrorMsg('Invalid username or password. Default: kevin_astemo / kevin12345');
+      setErrorMsg('ID Card tidak terdaftar. Gunakan kartu Kevin (Superadmin) atau Suep (Operator).');
       return;
     }
 
-    // Successful login: show toast and redirect
+    setLoggedInUser(matched);
     setShowSuccessToast(true);
+
     setTimeout(() => {
-      onLoginSuccess({ username });
-    }, 1200);
+      onLoginSuccess(matched);
+    }, 1000);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    authenticateUser(cardId);
+  };
+
+  const handleQuickTap = (user) => {
+    setCardId(user.idCard);
+    authenticateUser(user.idCard);
   };
 
   return (
@@ -52,18 +65,18 @@ export default function LoginPage({ onLoginSuccess }) {
       </div>
 
       {/* Top right toast */}
-      {showSuccessToast && (
+      {showSuccessToast && loggedInUser && (
         <Toast
           type="success"
-          title="Success"
-          message="Direct to Dashboard..."
+          title="Login Berhasil"
+          message={`Selamat datang, ${loggedInUser.name} (${loggedInUser.role})`}
           onClose={() => setShowSuccessToast(false)}
           duration={2500}
         />
       )}
 
       <div className="flex-1 flex items-center justify-center p-6 z-10">
-        <div className="w-full max-w-[480px] bg-white rounded-2xl shadow-xl border border-gray-100 p-10 flex flex-col items-center text-center">
+        <div className="w-full max-w-[480px] bg-white rounded-2xl shadow-xl border border-gray-100 p-8 xl:p-10 flex flex-col items-center text-center">
           {/* Astemo Brand */}
           <div className="mb-6 flex flex-col items-center">
             <img
@@ -75,29 +88,35 @@ export default function LoginPage({ onLoginSuccess }) {
               ASTEMO QUALITY DEVELOPMENT
             </h2>
             <p className="text-xs text-gray-500 mt-1">
-              Enter your username and password to continue.
+              Tap or scan your Employee ID Card to authenticate
             </p>
           </div>
 
-          {/* Form */}
+          {/* Form Tap / Scan ID Card */}
           <form onSubmit={handleSubmit} className="w-full text-left space-y-4">
-            {/* Username Input */}
+            {/* ID Card Reader Box */}
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                Username
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center justify-between">
+                <span>Scan / Nomor ID Card</span>
+                <span className="text-[11px] font-normal text-gray-400 flex items-center gap-1">
+                  <ScanLine className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                  RFID Ready
+                </span>
               </label>
+
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <User className="w-4 h-4" />
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-emerald-600">
+                  <CreditCard className="w-4 h-4" />
                 </div>
                 <input
                   type="text"
-                  value={username}
+                  autoFocus
+                  value={cardId}
                   onChange={(e) => {
-                    setUsername(e.target.value);
+                    setCardId(e.target.value);
                     if (isInvalid) setIsInvalid(false);
                   }}
-                  placeholder="Input username"
+                  placeholder="Tap ID Card atau ketik AST-SA-001..."
                   className={`w-full pl-10 pr-4 py-2.5 rounded-lg border text-sm transition-colors focus:outline-none ${
                     isInvalid
                       ? 'border-red-500 focus:border-red-500 bg-red-50/20'
@@ -107,91 +126,72 @@ export default function LoginPage({ onLoginSuccess }) {
               </div>
             </div>
 
-            {/* Password Input */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (isInvalid) setIsInvalid(false);
-                  }}
-                  placeholder="Input Password"
-                  className={`w-full pl-10 pr-10 py-2.5 rounded-lg border text-sm transition-colors focus:outline-none ${
-                    isInvalid
-                      ? 'border-red-500 focus:border-red-500 bg-red-50/20'
-                      : 'border-gray-200 focus:border-emerald-500 bg-[#FAFAFA]'
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Error Message with fixed height to avoid layout shift */}
+            {/* Error Message */}
             <div className="min-h-[18px]">
               {isInvalid && errorMsg ? (
                 <p className="text-xs text-red-500 font-medium">{errorMsg}</p>
               ) : null}
             </div>
 
-            {/* Default credentials hint */}
-            <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-[11px] text-gray-500 space-y-0.5">
-              <span className="font-semibold text-gray-700">Akun Default:</span>
-              <div className="flex justify-between">
-                <span>kevin_astemo / kevin12345</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsername('kevin_astemo');
-                    setPassword('kevin12345');
-                    setIsInvalid(false);
-                  }}
-                  className="text-[#00A854] font-medium hover:underline"
-                >
-                  Gunakan
-                </button>
-              </div>
-              <div className="flex justify-between">
-                <span>suep_astemo / suep12345</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsername('suep_astemo');
-                    setPassword('suep12345');
-                    setIsInvalid(false);
-                  }}
-                  className="text-[#00A854] font-medium hover:underline"
-                >
-                  Gunakan
-                </button>
-              </div>
-            </div>
-
-            {/* Submit Button */}
+            {/* Tap ID Card Button */}
             <button
               type="submit"
-              className="w-full mt-2 py-3 bg-[#00A854] hover:bg-[#008C45] text-white font-semibold rounded-lg text-sm transition-all shadow-sm active:scale-[0.99]"
+              className="w-full py-3 bg-[#00A854] hover:bg-[#008C45] text-white font-semibold rounded-lg text-sm transition-all shadow-sm active:scale-[0.99] flex items-center justify-center gap-2"
             >
-              LOG IN
+              <CreditCard className="w-4 h-4" />
+              <span>TAP / SCAN ID CARD</span>
             </button>
           </form>
+
+          {/* Quick Tap Simulation Badges */}
+          <div className="w-full mt-6 pt-5 border-t border-gray-100 text-left">
+            <p className="text-xs font-semibold text-gray-700 mb-2.5 flex items-center justify-between">
+              <span>Simulasi Tap ID Card:</span>
+              <span className="text-[10px] text-gray-400 font-normal">Klik untuk langsung login</span>
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Kevin - Superadmin Card */}
+              <button
+                type="button"
+                onClick={() => handleQuickTap(INITIAL_USERS[0])}
+                className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-300 transition-all text-left group shadow-xs active:scale-[0.98]"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-gray-900 group-hover:text-emerald-700 truncate">
+                    Kevin
+                  </p>
+                  <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                    Superadmin
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 font-mono mt-0.5">
+                  AST-SA-001
+                </p>
+                <p className="text-[10px] text-gray-400">Full Access</p>
+              </button>
+
+              {/* Suep - Operator Card */}
+              <button
+                type="button"
+                onClick={() => handleQuickTap(INITIAL_USERS[1])}
+                className="p-3 rounded-xl border border-blue-200 bg-blue-50/40 hover:bg-blue-50 hover:border-blue-300 transition-all text-left group shadow-xs active:scale-[0.98]"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-gray-900 group-hover:text-blue-700 truncate">
+                    Suep
+                  </p>
+                  <span className="text-[9px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                    Operator
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 font-mono mt-0.5">
+                  AST-OP-002
+                </p>
+                <p className="text-[10px] text-gray-400">Testing Only</p>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,8 @@
 export const INITIAL_USERS = [
   {
     id: 1,
+    idCard: 'AST-SA-001',
+    name: 'Kevin Pratama',
     username: 'kevin_astemo',
     role: 'Superadmin',
     datetime: '06/09/2026 12:00',
@@ -9,14 +11,18 @@ export const INITIAL_USERS = [
   },
   {
     id: 2,
+    idCard: 'AST-OP-002',
+    name: 'Suep Suryadi',
     username: 'suep_astemo',
-    role: 'Admin',
+    role: 'Operator',
     datetime: '06/09/2026 12:00',
     password: 'suep12345',
     passwordMasked: '*****************'
   },
   {
     id: 3,
+    idCard: 'AST-OP-003',
+    name: 'Budi Welding',
     username: 'budi_welding',
     role: 'Operator',
     datetime: '07/09/2026 08:30',
@@ -25,6 +31,8 @@ export const INITIAL_USERS = [
   },
   {
     id: 4,
+    idCard: 'AST-ENG-004',
+    name: 'Andi Quality',
     username: 'andi_quality',
     role: 'Engineer',
     datetime: '08/09/2026 14:15',
@@ -79,45 +87,45 @@ export const INITIAL_ROLES = [
   {
     id: 3,
     role: 'Operator',
-    menus: ['Dashboard', 'Testing Process', 'History Testing'],
-    permissions: ['Read, Create', 'Read, Create', 'Read'],
+    menus: ['Testing Process'],
+    permissions: ['Read, Create'],
     datetime: '07/09/2026 09:00'
   }
 ];
 
 export const INITIAL_MODELS = [
-  { id: 1, model: 'SKA01-20-110', datetime: '06/09/2026 12:00' },
-  { id: 2, model: 'SKA01-20-111', datetime: '06/09/2026 12:00' },
-  { id: 3, model: 'SKA01-20-112', datetime: '06/09/2026 12:00' },
-  { id: 4, model: 'SKA01-20-113', datetime: '06/09/2026 12:00' },
-  { id: 5, model: 'SKA01-20-114', datetime: '06/09/2026 12:00' },
-  { id: 6, model: 'SKA01-20-115', datetime: '06/09/2026 12:00' },
-  { id: 7, model: 'SKA01-20-116', datetime: '06/09/2026 12:00' },
-  { id: 8, model: 'SKA01-20-117', datetime: '06/09/2026 12:00' },
-  { id: 9, model: 'SKA01-20-118', datetime: '06/09/2026 12:00' },
-  { id: 10, model: 'SKA01-20-119', datetime: '06/09/2026 12:00' }
+  { id: 1, model: 'SKA01-20-110', stroke: 84.5, angle: 45, speed: 500, datetime: '06/09/2026 12:00' },
+  { id: 2, model: 'SKA01-20-111', stroke: 84.0, angle: 45, speed: 520, datetime: '06/09/2026 12:00' },
+  { id: 3, model: 'SKA01-20-112', stroke: 75.5, angle: 40, speed: 500, datetime: '06/09/2026 12:00' },
+  { id: 4, model: 'SKA01-20-113', stroke: 90.0, angle: 45, speed: 500, datetime: '06/09/2026 12:00' },
+  { id: 5, model: 'SKA01-20-114', stroke: 65.25, angle: 42, speed: 480, datetime: '06/09/2026 12:00' },
+  { id: 6, model: 'SKA01-20-115', stroke: 84.75, angle: 45, speed: 510, datetime: '06/09/2026 12:00' },
+  { id: 7, model: 'SKA01-20-116', stroke: 80.0, angle: 45, speed: 500, datetime: '06/09/2026 12:00' },
+  { id: 8, model: 'SKA01-20-117', stroke: 70.5, angle: 45, speed: 500, datetime: '06/09/2026 12:00' },
+  { id: 9, model: 'SKA01-20-118', stroke: 84.2, angle: 45, speed: 500, datetime: '06/09/2026 12:00' },
+  { id: 10, model: 'SKA01-20-119', stroke: 88.5, angle: 45, speed: 500, datetime: '06/09/2026 12:00' }
 ];
 
 const SAMPLE_TESTING_CURVES = [
   {
     // Testing 1 (Red)
     compression: [0, 160, 210, 250, 290, 330, 375, 425, 485, 560, 650, 760, 890, 1030, 1090, null],
-    rebound:     [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750,  890, 1090, null]
+    rebound:     [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750,  890,  890, null]
   },
   {
     // Testing 2 (Blue)
     compression: [0, 170, 222, 265, 305, 348, 395, 448, 510, 588, 680, 795, 925, 1070, 1130, null],
-    rebound:     [0, 125, 170, 208, 245, 282, 322, 370, 422, 490, 568, 665, 782,  925, 1130, null]
+    rebound:     [0, 125, 170, 208, 245, 282, 322, 370, 422, 490, 568, 665, 782,  925,  925, null]
   },
   {
     // Testing 3 (Green)
     compression: [0, 180, 235, 278, 320, 365, 412, 468, 532, 612, 708, 825, 958, 1105, 1165, null],
-    rebound:     [0, 135, 180, 220, 258, 295, 338, 388, 442, 512, 592, 692, 810,  958, 1165, null]
+    rebound:     [0, 135, 180, 220, 258, 295, 338, 388, 442, 512, 592, 692, 810,  958,  958, null]
   },
   {
     // Testing 4 (Orange)
     compression: [0, 190, 248, 290, 335, 380, 428, 485, 550, 632, 730, 850, 985, 1135, 1195, null],
-    rebound:     [0, 142, 190, 232, 270, 308, 352, 405, 460, 530, 612, 715, 835,  985, 1195, null]
+    rebound:     [0, 142, 190, 232, 270, 308, 352, 405, 460, 530, 612, 715, 835,  985,  985, null]
   }
 ];
 

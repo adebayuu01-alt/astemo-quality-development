@@ -21,7 +21,12 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
   const [dateRange, setDateRange] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingModel, setEditingModel] = useState(null);
+
+  // Form states
   const [modelName, setModelName] = useState('');
+  const [strokeVal, setStrokeVal] = useState('');
+  const [angleVal, setAngleVal] = useState('');
+  const [speedVal, setSpeedVal] = useState('');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -35,7 +40,9 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
   }, []);
 
   const filteredModels = models.filter((m) =>
-    m.model.toLowerCase().includes(searchQuery.toLowerCase())
+    m.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(m.stroke).toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(m.speed).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const totalEntries = filteredModels.length;
@@ -45,17 +52,50 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
     currentPage * itemsPerPage
   );
 
-  // 3. Add Data Success Alert
+  const handleOpenAdd = () => {
+    setEditingModel(null);
+    setModelName('');
+    setStrokeVal('');
+    setAngleVal('');
+    setSpeedVal('');
+    setShowAddModal(true);
+  };
+
+  const handleOpenEdit = (m) => {
+    setEditingModel(m);
+    setModelName(m.model);
+    setStrokeVal(m.stroke !== undefined ? String(m.stroke) : '');
+    setAngleVal(m.angle !== undefined ? String(m.angle) : '');
+    setSpeedVal(m.speed !== undefined ? String(m.speed) : '');
+    setShowAddModal(true);
+  };
+
   const handleSaveModel = (e) => {
     e.preventDefault();
     if (!modelName.trim()) {
       setToast({ type: 'error', title: 'Error', message: 'Model name is required.' });
       return;
     }
+    if (strokeVal === '' || angleVal === '' || speedVal === '') {
+      setToast({ type: 'error', title: 'Error', message: 'Semua parameter (Stroke, Angle, Speed) wajib diisi.' });
+      return;
+    }
+
+    const parsedStroke = parseFloat(strokeVal) || 0;
+    const parsedAngle = parseFloat(angleVal) || 0;
+    const parsedSpeed = parseFloat(speedVal) || 0;
 
     if (editingModel) {
       const updated = models.map((m) =>
-        m.id === editingModel.id ? { ...m, model: modelName } : m
+        m.id === editingModel.id
+          ? {
+              ...m,
+              model: modelName.trim(),
+              stroke: parsedStroke,
+              angle: parsedAngle,
+              speed: parsedSpeed
+            }
+          : m
       );
       onUpdateModels(updated);
       setToast({
@@ -66,7 +106,10 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
     } else {
       const newModel = {
         id: Date.now(),
-        model: modelName,
+        model: modelName.trim(),
+        stroke: parsedStroke,
+        angle: parsedAngle,
+        speed: parsedSpeed,
         datetime: new Date().toLocaleDateString('en-GB') + ' 12:00'
       };
       onUpdateModels([...models, newModel]);
@@ -80,6 +123,9 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
     setShowAddModal(false);
     setEditingModel(null);
     setModelName('');
+    setStrokeVal('');
+    setAngleVal('');
+    setSpeedVal('');
   };
 
   const handleDeleteModel = (id) => {
@@ -92,8 +138,8 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
   return (
     <>
       <div className="space-y-4">
-        {/* Header matching Testing Process exactly */}
-        <PageHeaderCard title="Model" subtitle="List model data" />
+        {/* Header */}
+        <PageHeaderCard title="Model" subtitle="Master data model parameters configuration" />
 
         {/* Table Card */}
         <div className="bg-white rounded-xl border border-[#E4E7EC] p-6 shadow-sm space-y-5">
@@ -105,7 +151,7 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search"
+                placeholder="Search model, stroke, or speed..."
                 className="w-full pl-10 pr-9 py-2 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:border-emerald-500"
               />
               {searchQuery && (
@@ -126,11 +172,7 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
               />
 
               <button
-                onClick={() => {
-                  setEditingModel(null);
-                  setModelName('');
-                  setShowAddModal(true);
-                }}
+                onClick={handleOpenAdd}
                 className="flex items-center gap-2 px-4 py-2 bg-[#00A854] hover:bg-[#008C45] text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
               >
                 <Plus className="w-4 h-4" />
@@ -141,67 +183,101 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
 
           {/* Table / Skeleton */}
           {loading ? (
-            <SkeletonTable rows={5} cols={4} />
+            <SkeletonTable rows={5} cols={7} />
           ) : (
             <div className="overflow-x-auto rounded-lg border border-[#D0D5DD]">
               <table className="w-full text-left border-collapse text-sm">
                 <thead className="bg-[#F2F2F7] border-b border-[#D0D5DD]">
-                  <tr className="text-[#23262B] font-semibold">
-                    <th className="py-3.5 px-4 w-16">
-                      <div className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <tr className="text-[#23262B] font-semibold text-xs">
+                    <th className="py-3.5 px-4 w-14">
+                      <div className="flex items-center gap-1 cursor-pointer select-none">
                         <span>No</span>
-                        <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400" />
                       </div>
                     </th>
                     <th className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <div className="flex items-center gap-1 cursor-pointer select-none">
                         <span>Model</span>
-                        <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400" />
                       </div>
                     </th>
                     <th className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <div className="flex items-center gap-1 cursor-pointer select-none">
+                        <span>Stroke (mm)</span>
+                        <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                      </div>
+                    </th>
+                    <th className="py-3.5 px-4">
+                      <div className="flex items-center gap-1 cursor-pointer select-none">
+                        <span>Angle (deg)</span>
+                        <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                      </div>
+                    </th>
+                    <th className="py-3.5 px-4">
+                      <div className="flex items-center gap-1 cursor-pointer select-none">
+                        <span>Speed (mm/min)</span>
+                        <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                      </div>
+                    </th>
+                    <th className="py-3.5 px-4">
+                      <div className="flex items-center gap-1 cursor-pointer select-none">
                         <span>Datetime</span>
-                        <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400" />
                       </div>
                     </th>
                     <th className="py-3.5 px-4 text-center w-24">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E4E7EC] bg-white">
-                  {paginatedModels.map((m, index) => (
-                    <tr key={m.id} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="py-3.5 px-4 text-gray-600 font-medium">
-                        {(currentPage - 1) * itemsPerPage + index + 1}
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-800 font-medium">
-                        {m.model}
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-600">{m.datetime}</td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingModel(m);
-                              setModelName(m.model);
-                              setShowAddModal(true);
-                            }}
-                            className="p-1.5 border border-amber-300 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
-                            title="Edit Model"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteModel(m.id)}
-                            className="p-1.5 border border-red-200 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete Model"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {paginatedModels.map((m, index) => {
+                    const strokeDisplay =
+                      m.stroke !== undefined
+                        ? Number(m.stroke).toLocaleString('en-US', {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 2
+                          })
+                        : '84.5';
+                    return (
+                      <tr key={m.id} className="hover:bg-gray-50/80 transition-colors">
+                        <td className="py-3.5 px-4 text-gray-600 font-medium">
+                          {(currentPage - 1) * itemsPerPage + index + 1}
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-900 font-semibold">
+                          {m.model}
+                        </td>
+                        <td className="py-3.5 px-4 text-emerald-700 font-semibold">
+                          {strokeDisplay} mm
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-700 font-medium">
+                          {m.angle ?? 45}°
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-700 font-medium">
+                          {m.speed ?? 500} mm/min
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-500 text-xs">
+                          {m.datetime}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleOpenEdit(m)}
+                              className="p-1.5 border border-amber-300 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                              title="Edit Model"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteModel(m.id)}
+                              className="p-1.5 border border-red-200 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete Model"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -212,7 +288,7 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
             <div>
               Showing <span className="font-semibold text-gray-700">1</span> to{' '}
               <span className="font-semibold text-gray-700">
-                {Math.min(itemsPerPage, totalEntries)}  
+                {Math.min(itemsPerPage, totalEntries)}
               </span>{' '}
               of <span className="font-semibold text-gray-700">{totalEntries}</span>{' '}
               entries
@@ -262,7 +338,7 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
         </div>
       </div>
 
-      {/* 4. Add / Edit Model Modal using ModalPortal (Zero Gap Blur) */}
+      {/* Add / Edit Model Modal */}
       <ModalPortal isOpen={showAddModal} onClose={() => setShowAddModal(false)}>
         <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
           <div className="flex items-start justify-between border-b border-gray-100 pb-3">
@@ -271,7 +347,7 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
                 {editingModel ? 'Edit Model' : 'Add Model'}
               </h3>
               <p className="text-xs text-gray-400 mt-0.5">
-                This field is for desc terms of service
+                Setting parameter model untuk digunakan operator saat pengujian
               </p>
             </div>
             <button
@@ -285,13 +361,62 @@ export default function MasterDataModelPage({ models, onUpdateModels }) {
           <form onSubmit={handleSaveModel} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Model
+                Model Name
               </label>
               <input
                 type="text"
+                required
                 value={modelName}
                 onChange={(e) => setModelName(e.target.value)}
-                placeholder="Input Model"
+                placeholder="Contoh: SKA01-20-110"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Stroke (mm) */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Stroke (mm)
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={strokeVal}
+                onChange={(e) => setStrokeVal(e.target.value)}
+                placeholder="Input parameter stroke (e.g. 84.5)"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Angle (deg) */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Angle (deg)
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={angleVal}
+                onChange={(e) => setAngleVal(e.target.value)}
+                placeholder="Input parameter angle (e.g. 45)"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Speed (mm/min) - placed below Angle */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Speed (mm/min)
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={speedVal}
+                onChange={(e) => setSpeedVal(e.target.value)}
+                placeholder="Input parameter speed (e.g. 500)"
                 className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
               />
             </div>

@@ -17,12 +17,18 @@ import {
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeMenu, setActiveMenu] = useState('testing-process');
+  const [plcConnected, setPlcConnected] = useState(true);
 
   // Application Data States
   const [users, setUsers] = useState(INITIAL_USERS);
   const [roles, setRoles] = useState(INITIAL_ROLES);
   const [models, setModels] = useState(INITIAL_MODELS);
   const [historyList, setHistoryList] = useState(INITIAL_HISTORY);
+
+  const isOperator =
+    currentUser?.role === 'Operator' ||
+    currentUser?.username === 'suep_astemo' ||
+    currentUser?.idCard === 'AST-OP-002';
 
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
@@ -33,8 +39,20 @@ export default function App() {
     setCurrentUser(null);
   };
 
+  const handleNavigate = (menu) => {
+    // Suep (Operator) can only view Testing Process
+    if (isOperator && menu !== 'testing-process') {
+      return;
+    }
+    setActiveMenu(menu);
+  };
+
   const handleSaveToHistory = (newRecord) => {
     setHistoryList((prev) => [newRecord, ...prev]);
+  };
+
+  const togglePlc = () => {
+    setPlcConnected((prev) => !prev);
   };
 
   // If not logged in, render LoginPage
@@ -45,34 +63,39 @@ export default function App() {
   return (
     <Layout
       activeMenu={activeMenu}
-      onNavigate={(menu) => setActiveMenu(menu)}
+      onNavigate={handleNavigate}
       onLogout={handleLogout}
+      currentUser={currentUser}
+      plcConnected={plcConnected}
+      onTogglePlc={togglePlc}
     >
       {activeMenu === 'testing-process' && (
         <TestingProcessPage
           models={models}
-          onNavigateToHistory={() => setActiveMenu('history-testing')}
+          currentUser={currentUser}
+          plcConnected={plcConnected}
+          onNavigateToHistory={() => handleNavigate('history-testing')}
           onSaveToHistory={handleSaveToHistory}
         />
       )}
 
-      {activeMenu === 'history-testing' && (
+      {!isOperator && activeMenu === 'history-testing' && (
         <HistoryTestingPage
           historyList={historyList}
           models={models}
-          onBackToTesting={() => setActiveMenu('testing-process')}
+          onBackToTesting={() => handleNavigate('testing-process')}
         />
       )}
 
-      {activeMenu === 'user-management' && (
+      {!isOperator && activeMenu === 'user-management' && (
         <UserManagementPage users={users} onUpdateUsers={setUsers} roles={roles} />
       )}
 
-      {activeMenu === 'role-management' && (
+      {!isOperator && activeMenu === 'role-management' && (
         <RoleManagementPage roles={roles} onUpdateRoles={setRoles} />
       )}
 
-      {activeMenu === 'master-data-model' && (
+      {!isOperator && activeMenu === 'master-data-model' && (
         <MasterDataModelPage models={models} onUpdateModels={setModels} />
       )}
     </Layout>

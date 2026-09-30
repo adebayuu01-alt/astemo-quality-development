@@ -28,32 +28,12 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
 
-  // Add User Form State
+  // Add / Edit User Form State
   const [username, setUsername] = useState('');
   const [role, setRole] = useState('Admin');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPwd, setShowPwd] = useState(false);
-  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
-
-  // Reset Password State
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [showNewPwd, setShowNewPwd] = useState(false);
-  const [showConfirmNewPwd, setShowConfirmNewPwd] = useState(false);
-
-  // Table row password visibility toggle (per user id)
-  const [visiblePasswords, setVisiblePasswords] = useState({});
-
-  const togglePasswordVisibility = (userId) => {
-    setVisiblePasswords((prev) => ({
-      ...prev,
-      [userId]: !prev[userId]
-    }));
-  };
+  const [idCard, setIdCard] = useState('');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -69,7 +49,8 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
   const filteredUsers = users.filter(
     (u) =>
       u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.role.toLowerCase().includes(searchQuery.toLowerCase())
+      u.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.idCard && u.idCard.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const totalEntries = filteredUsers.length;
@@ -79,21 +60,21 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
     currentPage * itemsPerPage
   );
 
-  // 3. Add Data Success Alert
+  // Add / Edit User Save
   const handleSaveUser = (e) => {
     e.preventDefault();
     if (!username.trim()) {
       setToast({ type: 'error', title: 'Error', message: 'Username is required.' });
       return;
     }
-    if (!editingUser && (!password || password !== confirmPassword)) {
-      setToast({ type: 'error', title: 'Error', message: 'Passwords must match and not be empty.' });
+    if (!idCard.trim()) {
+      setToast({ type: 'error', title: 'Error', message: 'ID Card is required.' });
       return;
     }
 
     if (editingUser) {
       const updated = users.map((u) =>
-        u.id === editingUser.id ? { ...u, username, role, ...(password ? { password } : {}) } : u
+        u.id === editingUser.id ? { ...u, username: username.trim(), role, idCard: idCard.trim() } : u
       );
       onUpdateUsers(updated);
       setToast({
@@ -104,25 +85,23 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
     } else {
       const newUser = {
         id: Date.now(),
-        username,
+        idCard: idCard.trim(),
+        username: username.trim(),
         role,
-        datetime: new Date().toLocaleDateString('en-GB') + ' 12:00',
-        password: password,
-        passwordMasked: '*****************'
+        datetime: new Date().toLocaleDateString('en-GB') + ' 12:00'
       };
       onUpdateUsers([...users, newUser]);
       setToast({
         type: 'success',
         title: 'User Added Successfully',
-        message: `User ${username} has been added to the system.`
+        message: `User ${username} with ID Card ${idCard} has been added to the system.`
       });
     }
 
     setShowAddModal(false);
     setEditingUser(null);
     setUsername('');
-    setPassword('');
-    setConfirmPassword('');
+    setIdCard('');
   };
 
   const handleDeleteUser = (id) => {
@@ -202,8 +181,7 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
                   setEditingUser(null);
                   setUsername('');
                   setRole('Admin');
-                  setPassword('');
-                  setConfirmPassword('');
+                  setIdCard('');
                   setShowAddModal(true);
                 }}
                 className="flex items-center gap-2 px-4 py-2 bg-[#00A854] hover:bg-[#008C45] text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -242,7 +220,7 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
                     </th>
                     <th className="py-3.5 px-4">
                       <div className="flex items-center gap-1.5 cursor-pointer select-none">
-                        <span>Password</span>
+                        <span>ID Card</span>
                         <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
                       </div>
                     </th>
@@ -265,46 +243,8 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
                         {u.username}
                       </td>
                       <td className="py-3.5 px-4 text-gray-600">{u.role}</td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className={`min-w-[100px] select-all ${
-                              visiblePasswords[u.id]
-                                ? 'font-mono text-gray-800 text-xs font-semibold'
-                                : 'font-mono text-gray-400 tracking-wider text-xs'
-                            }`}
-                          >
-                            {visiblePasswords[u.id]
-                              ? (u.password || 'astemo12345')
-                              : (u.passwordMasked || '*****************')}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => togglePasswordVisibility(u.id)}
-                              className={`p-1 border rounded-md transition-colors ${
-                                visiblePasswords[u.id]
-                                  ? 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'
-                                  : 'border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                              }`}
-                              title={visiblePasswords[u.id] ? 'Sembunyikan Password' : 'Lihat Password'}
-                            >
-                              {visiblePasswords[u.id] ? (
-                                <EyeOff className="w-3.5 h-3.5" />
-                              ) : (
-                                <Eye className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setShowResetModal(u)}
-                              className="p-1 border border-orange-200 text-orange-500 hover:bg-orange-50 rounded-md transition-colors"
-                              title="Reset Password"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
+                      <td className="py-3.5 px-4 text-gray-800 font-medium">
+                        {u.idCard || '-'}
                       </td>
                       <td className="py-3.5 px-4 text-gray-600">{u.datetime}</td>
                       <td className="py-3.5 px-4 text-center">
@@ -314,6 +254,7 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
                               setEditingUser(u);
                               setUsername(u.username);
                               setRole(u.role);
+                              setIdCard(u.idCard || '');
                               setShowAddModal(true);
                             }}
                             className="p-1.5 border border-amber-300 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
@@ -439,57 +380,19 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
               />
             </div>
 
-            {!editingUser && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPwd ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Input Password"
-                      className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPwd(!showPwd)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPwd ? 'text' : 'password'}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Input Password"
-                      className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPwd(!showConfirmPwd)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showConfirmPwd ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                ID Card
+              </label>
+              <input
+                type="text"
+                required
+                value={idCard}
+                onChange={(e) => setIdCard(e.target.value)}
+                placeholder="Input ID Card (e.g. AST-OP-005)"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
 
             <div className="flex items-center justify-end gap-3 pt-3">
               <button
@@ -508,96 +411,6 @@ export default function UserManagementPage({ users, onUpdateUsers, roles = [] })
             </div>
           </form>
         </div>
-      </ModalPortal>
-
-      {/* 4. Reset Password Modal using ModalPortal (Zero Gap Blur) */}
-      <ModalPortal isOpen={!!showResetModal} onClose={() => setShowResetModal(null)}>
-        {showResetModal && (
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-start justify-between border-b border-gray-100 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">
-                  Reset Password: {showResetModal.username}
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  This field is for desc terms of service
-                </p>
-              </div>
-              <button
-                onClick={() => setShowResetModal(null)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  New Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewPwd ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Input New Password"
-                    className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPwd(!showNewPwd)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showNewPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Confirm New Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showConfirmNewPwd ? 'text' : 'password'}
-                    value={confirmNewPassword}
-                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    placeholder="Input New Password"
-                    className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmNewPwd(!showConfirmNewPwd)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showConfirmNewPwd ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowResetModal(null)}
-                  className="px-5 py-2.5 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-[#00A854] hover:bg-[#008C45] text-white rounded-lg text-sm font-medium shadow-sm"
-                >
-                  Save
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
       </ModalPortal>
 
       {/* Toast */}

@@ -7,7 +7,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RotateCcw,
+  MinusCircle,
+  PlusCircle
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -99,7 +102,12 @@ export default function HistoryTestingPage({
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [viewRecord, setViewRecord] = useState(null);
   const [toast, setToast] = useState(null);
+  const [historyZoomLevel, setHistoryZoomLevel] = useState(1.0);
   const modalTooltipRef = useRef(null);
+
+  const handleZoomInHistory = () => setHistoryZoomLevel((prev) => Math.min(3.0, +(prev + 0.35).toFixed(2)));
+  const handleZoomOutHistory = () => setHistoryZoomLevel((prev) => Math.max(1.0, +(prev - 0.35).toFixed(2)));
+  const handleResetHistoryZoom = () => setHistoryZoomLevel(1.0);
 
   // Custom Tooltip HTML matching Testing Process Page exactly
   const customModalTooltipHandler = (context) => {
@@ -204,16 +212,19 @@ export default function HistoryTestingPage({
             const datasets = chart.data.datasets;
             const items = [];
             for (let i = 0; i < datasets.length; i += 2) {
-              const trialNum = Math.floor(i / 2) + 1;
-              const color = datasets[i].borderColor;
+              const cycleIdx = Math.floor(i / 2);
+              const ds = datasets[i];
+              const fullLabel = ds?.label || '';
+              const cycleName = fullLabel.split(' - ')[0] || `Testing ${cycleIdx + 1}`;
+              const color = ds?.borderColor || '#00A854';
               const isHidden = !chart.isDatasetVisible(i);
               items.push({
-                text: `Testing ${trialNum}`,
+                text: cycleName,
                 fillStyle: color,
                 strokeStyle: color,
                 lineWidth: 1,
                 hidden: isHidden,
-                datasetIndex: Math.floor(i / 2)
+                datasetIndex: cycleIdx
               });
             }
             return items;
@@ -237,6 +248,8 @@ export default function HistoryTestingPage({
     },
     scales: {
       x: {
+        min: 0,
+        max: 90,
         title: {
           display: true,
           text: 'Disp. (mm)',
@@ -253,16 +266,16 @@ export default function HistoryTestingPage({
         }
       },
       y: {
+        min: historyZoomLevel > 1.0 ? Math.max(-100, Math.round(700 - (800 / historyZoomLevel))) : -100,
+        max: historyZoomLevel > 1.0 ? Math.min(1500, Math.round(700 + (800 / historyZoomLevel))) : 1500,
         title: {
           display: true,
           text: 'Force (N)',
           color: '#4C4E67',
           font: { size: 12, weight: '500' }
         },
-        min: -100,
-        max: 1500,
         ticks: {
-          stepSize: 100,
+          stepSize: historyZoomLevel > 1.5 ? 50 : 100,
           color: '#475467',
           font: { size: 10 }
         },
@@ -283,7 +296,7 @@ export default function HistoryTestingPage({
         const color = TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854';
         return [
           {
-            label: `Testing ${i + 1} (Kompresi)`,
+            label: `Testing ${i + 1} - Compression (data saat naik)`,
             data: tData.compression,
             borderColor: color,
             backgroundColor: color,
@@ -297,7 +310,7 @@ export default function HistoryTestingPage({
             spanGaps: false
           },
           {
-            label: `Testing ${i + 1} (Rebound)`,
+            label: `Testing ${i + 1} - Tension (data saat turun)`,
             data: tData.rebound,
             borderColor: color,
             backgroundColor: color,
@@ -315,11 +328,14 @@ export default function HistoryTestingPage({
     }
 
     if (cd.cycles && cd.cycles.length > 0) {
-      return cd.cycles.flatMap((c, i) => {
-        const color = TRIAL_COLORS[i % TRIAL_COLORS.length] || '#1890FF';
+      const testCycles = cd.cycles.filter((c) => !c.isWarmUp);
+      const cyclesToRender = testCycles.length > 0 ? testCycles : cd.cycles;
+      return cyclesToRender.flatMap((c, i) => {
+        const color = c.color || TRIAL_COLORS[i % TRIAL_COLORS.length] || '#00A854';
+        const cycleName = c.name || `Testing ${c.cycleNum || i + 1}`;
         return [
           {
-            label: `Testing ${c.cycleNum || i + 1} (Kompresi)`,
+            label: `${cycleName} - Compression (data saat naik)`,
             data: c.compression,
             borderColor: color,
             backgroundColor: color,
@@ -333,7 +349,7 @@ export default function HistoryTestingPage({
             spanGaps: false
           },
           {
-            label: `Testing ${c.cycleNum || i + 1} (Rebound)`,
+            label: `${cycleName} - Tension (data saat turun)`,
             data: c.rebound,
             borderColor: color,
             backgroundColor: color,
@@ -354,7 +370,7 @@ export default function HistoryTestingPage({
       const color = TRIAL_COLORS[0];
       return [
         {
-          label: 'Testing 1 (Kompresi)',
+          label: 'Testing 1 - Compression (data saat naik)',
           data: cd.compression,
           borderColor: color,
           backgroundColor: color,
@@ -368,7 +384,7 @@ export default function HistoryTestingPage({
           spanGaps: false
         },
         {
-          label: 'Testing 1 (Rebound)',
+          label: 'Testing 1 - Tension (data saat turun)',
           data: cd.rebound,
           borderColor: color,
           backgroundColor: color,
@@ -388,7 +404,7 @@ export default function HistoryTestingPage({
     const color = TRIAL_COLORS[0];
     return [
       {
-        label: 'Testing 1 (Kompresi)',
+        label: 'Testing 1 - Compression (data saat naik)',
         data: cd.s1 || [0, 160, 210, 250, 290, 330, 375, 425, 485, 560, 650, 760, 890, 1030, 1090, null],
         borderColor: color,
         backgroundColor: color,
@@ -402,7 +418,7 @@ export default function HistoryTestingPage({
         spanGaps: false
       },
       {
-        label: 'Testing 1 (Rebound)',
+        label: 'Testing 1 - Tension (data saat turun)',
         data: cd.s2 || [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750, 890, 1090, null],
         borderColor: color,
         backgroundColor: color,
@@ -470,9 +486,10 @@ export default function HistoryTestingPage({
 
       if (record.chartData.cycles && record.chartData.cycles.length > 0) {
         const header = ['Stroke (mm)'];
-        record.chartData.cycles.forEach((c) => {
-          header.push(`Siklus ${c.cycleNum} - Kompresi (N)`);
-          header.push(`Siklus ${c.cycleNum} - Rebound (N)`);
+        record.chartData.cycles.forEach((c, idx) => {
+          const name = c.name || `Siklus ${c.cycleNum || idx + 1}`;
+          header.push(`${name} - Compression (N)`);
+          header.push(`${name} - Tension (N)`);
         });
         data.push(header);
 
@@ -758,26 +775,64 @@ export default function HistoryTestingPage({
               <div className="px-6 py-4 flex flex-col gap-4 overflow-y-auto">
                 {/* Konten Paling Atas: Chart Curves Snapshot */}
                 <div>
-                  <p className="text-sm text-[#344054] mb-2 font-normal">Testing Curves</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-[#344054] font-medium">Testing Curves</p>
+                    <div className="flex items-center gap-1 text-gray-500">
+                      <button
+                        type="button"
+                        onClick={handleResetHistoryZoom}
+                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                        title="Reset Zoom"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleZoomOutHistory}
+                        disabled={historyZoomLevel <= 1.0}
+                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                        title="Zoom Out"
+                      >
+                        <MinusCircle className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleZoomInHistory}
+                        disabled={historyZoomLevel >= 3.0}
+                        className="p-1 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                        title="Zoom In"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                   <div className="border border-[#D0D5DD] rounded-xl p-3 bg-white">
-                    <div className="h-[280px] sm:h-[300px] w-full relative">
-                      <Line
-                        data={{
-                          labels: STROKE_LABELS,
-                          datasets: getModalDatasets(viewRecord)
-                        }}
-                        options={modalChartOptions}
-                        plugins={[verticalLinePlugin]}
-                      />
-
-                      {/* Floating Custom Tooltip Container matching Testing Process Page */}
+                    <div className="h-[280px] sm:h-[300px] w-full relative overflow-x-auto overflow-y-hidden chart-scrollbar rounded-lg">
                       <div
-                        ref={modalTooltipRef}
-                        className="pointer-events-none absolute z-20 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 shadow-lg transition-all duration-75 opacity-0 min-w-[140px] whitespace-nowrap"
+                        className="h-full min-h-[280px] sm:min-h-[300px] relative transition-all duration-150"
                         style={{
-                          boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
+                          width: historyZoomLevel > 1.0 ? `${Math.round(historyZoomLevel * 100)}%` : '100%',
+                          minWidth: historyZoomLevel > 1.0 ? `${Math.round(historyZoomLevel * 680)}px` : '100%'
                         }}
-                      />
+                      >
+                        <Line
+                          data={{
+                            labels: STROKE_LABELS,
+                            datasets: getModalDatasets(viewRecord)
+                          }}
+                          options={modalChartOptions}
+                          plugins={[verticalLinePlugin]}
+                        />
+
+                        {/* Floating Custom Tooltip Container matching Testing Process Page */}
+                        <div
+                          ref={modalTooltipRef}
+                          className="pointer-events-none absolute z-20 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 shadow-lg transition-all duration-75 opacity-0 min-w-[140px] whitespace-nowrap"
+                          style={{
+                            boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -795,7 +850,9 @@ export default function HistoryTestingPage({
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-[#344054]">Siklus Pengujian</span>
                   <span className="font-bold text-[#101828]">
-                    {viewRecord.trialsCount || (viewRecord.chartData?.trials ? viewRecord.chartData.trials.length : 3)}x Pengujian
+                    {viewRecord.warmingUpCount
+                      ? `${viewRecord.warmingUpCount}x Warming Up + 1x Testing`
+                      : `${viewRecord.trialsCount || (viewRecord.chartData?.trials ? viewRecord.chartData.trials.length : 1)}x Pengujian`}
                   </span>
                 </div>
 
@@ -833,16 +890,16 @@ export default function HistoryTestingPage({
                       <p className="text-xs text-[#344054]">Load</p>
                       <p className="text-sm font-bold text-[#101828] mt-0.5">{viewRecord.metrics?.load ?? 55}</p>
                     </div>
-                    <div className="border border-[#D0D5DD] rounded-lg py-2.5 px-1 text-center bg-white">
-                      <p className="text-xs text-[#344054]">Compress</p>
+                    <div className="border border-red-500 rounded-lg py-2.5 px-1 text-center bg-red-50">
+                      <p className="text-xs text-red-600 font-semibold">Compression</p>
                       <p className="text-sm font-bold text-[#101828] mt-0.5">{viewRecord.metrics?.loadCompression ?? 58}</p>
                     </div>
-                    <div className="border border-[#D0D5DD] rounded-lg py-2.5 px-1 text-center bg-white">
-                      <p className="text-xs text-[#344054]">Force</p>
+                    <div className="border border-purple-500 rounded-lg py-2.5 px-1 text-center bg-purple-50">
+                      <p className="text-xs text-purple-600 font-semibold">Tension</p>
                       <p className="text-sm font-bold text-[#101828] mt-0.5">{viewRecord.metrics?.loadForce ?? 59}</p>
                     </div>
-                    <div className="border border-[#D0D5DD] rounded-lg py-2.5 px-1 text-center bg-white">
-                      <p className="text-xs text-[#344054]">Friction</p>
+                    <div className="border border-green-500 rounded-lg py-2.5 px-1 text-center bg-green-50">
+                      <p className="text-xs text-green-600 font-semibold">Friction</p>
                       <p className="text-sm font-bold text-[#101828] mt-0.5">{viewRecord.metrics?.frictionForce ?? 50}</p>
                     </div>
                   </div>
