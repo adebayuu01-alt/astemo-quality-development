@@ -100,23 +100,20 @@ export default function Layout({
           <button
             type="button"
             onClick={onTogglePlc}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all select-none shadow-xs ${
-              plcConnected
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all select-none shadow-xs ${plcConnected
                 ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100/70 text-[#00A854]'
                 : 'bg-red-50 border-red-200 hover:bg-red-100/70 text-red-600'
-            }`}
+              }`}
             title="Klik untuk simulasi toggle status PLC (Connected / Disconnected)"
           >
             <span className="relative flex h-2.5 w-2.5">
               <span
-                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  plcConnected ? 'bg-emerald-400' : 'bg-red-400'
-                }`}
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${plcConnected ? 'bg-emerald-400' : 'bg-red-400'
+                  }`}
               />
               <span
-                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                  plcConnected ? 'bg-[#00A854]' : 'bg-red-500'
-                }`}
+                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${plcConnected ? 'bg-[#00A854]' : 'bg-red-500'
+                  }`}
               />
             </span>
             <span className="text-xs font-bold tracking-wide">
@@ -125,7 +122,7 @@ export default function Layout({
           </button>
 
           {/* Date and Time Header */}
-          <div className="text-sm text-[#475467] font-medium flex items-center gap-1.5">
+          <div className="text-xl text-[#475467] font-medium flex items-center gap-1.5">
             <span>{dateStr}</span>
             <span className="text-gray-300">|</span>
             <span className="font-bold text-[#1E232F]">{timeStr}</span>
@@ -137,9 +134,8 @@ export default function Layout({
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar - Pinned stay, never scrolls with page content */}
         <aside
-          className={`${
-            sidebarOpen ? 'w-64' : 'w-20'
-          } h-full bg-white border-r border-[#E4E7EC] flex flex-col justify-between transition-all duration-300 ease-in-out select-none flex-shrink-0 z-20`}
+          className={`${sidebarOpen ? 'w-64' : 'w-20'
+            } h-full bg-white border-r border-[#E4E7EC] flex flex-col justify-between transition-all duration-300 ease-in-out select-none flex-shrink-0 z-20`}
         >
           {/* Menu Sections */}
           <div className="py-6 px-4 space-y-6 overflow-y-auto">
@@ -152,11 +148,10 @@ export default function Layout({
               )}
               <button
                 onClick={() => onNavigate('testing-process')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  activeMenu === 'testing-process' || activeMenu === 'history-testing'
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'testing-process' || activeMenu === 'history-testing'
                     ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
                     : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
-                }`}
+                  }`}
                 title="Testing Process"
               >
                 <Activity className="w-5 h-5 flex-shrink-0" />
@@ -175,11 +170,10 @@ export default function Layout({
                 <div className="space-y-1">
                   <button
                     onClick={() => onNavigate('user-management')}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                      activeMenu === 'user-management'
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'user-management'
                         ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
                         : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
-                    }`}
+                      }`}
                     title="User Management"
                   >
                     <Users className="w-5 h-5 flex-shrink-0" />
@@ -188,11 +182,10 @@ export default function Layout({
 
                   <button
                     onClick={() => onNavigate('role-management')}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                      activeMenu === 'role-management'
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'role-management'
                         ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
                         : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
-                    }`}
+                      }`}
                     title="Role Management"
                   >
                     <ShieldCheck className="w-5 h-5 flex-shrink-0" />
@@ -227,11 +220,10 @@ export default function Layout({
                           onNavigate('master-data-model');
                         }
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                        activeMenu === 'master-data-model'
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'master-data-model'
                           ? 'text-[#00A854] font-semibold'
                           : 'text-[#475467] hover:bg-gray-50'
-                      }`}
+                        }`}
                       title="Master Data"
                     >
                       <div className="flex items-center gap-3">
@@ -255,11 +247,10 @@ export default function Layout({
 
                           <button
                             onClick={() => onNavigate('master-data-model')}
-                            className={`w-full flex items-center px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              activeMenu === 'master-data-model'
+                            className={`w-full flex items-center px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeMenu === 'master-data-model'
                                 ? 'bg-[#EAF8F1] text-[#00A854] font-semibold'
                                 : 'text-[#475467] hover:bg-gray-50 hover:text-gray-900'
-                            }`}
+                              }`}
                           >
                             <span>Model</span>
                           </button>
