@@ -312,12 +312,15 @@ export default function HistoryTestingPage({
     if (tooltip.body) {
       let innerHtml = `
         <div style="text-align: center; font-weight: 700; font-size: 11px; color: #101828; margin-bottom: 8px;">
-          Titik: ${tooltip.dataPoints[0]?.label ?? ''}
+          Stroke: ${tooltip.dataPoints[0]?.label ?? ''} mm
         </div>
         <div style="display: flex; flex-direction: column; gap: 5px;">
       `;
 
       let hasValidPoints = false;
+      let compPoint = null;
+      let tensPoint = null;
+
       tooltip.dataPoints.forEach((dp) => {
         if (dp.raw === null || dp.raw === undefined) return;
 
@@ -326,6 +329,13 @@ export default function HistoryTestingPage({
         const color = dataset.borderColor;
         const label = dataset.label;
         const val = dp.formattedValue;
+
+        const numVal = typeof dp.raw === 'number' ? dp.raw : parseFloat(dp.raw);
+        if (dataset.isCompression || label?.toLowerCase().includes('compression')) {
+          compPoint = numVal;
+        } else if (dataset.isTension || label?.toLowerCase().includes('tension')) {
+          tensPoint = numVal;
+        }
 
         innerHtml += `
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; white-space: nowrap;">
@@ -337,6 +347,19 @@ export default function HistoryTestingPage({
           </div>
         `;
       });
+
+      if (compPoint !== null && tensPoint !== null && !isNaN(compPoint) && !isNaN(tensPoint)) {
+        const diffVal = Math.abs(Math.round(compPoint - tensPoint));
+        innerHtml += `
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; white-space: nowrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #00A854; flex-shrink: 0;"></span>
+              <span style="font-size: 11px; color: #475467; font-weight: 500;">Friction Force</span>
+            </div>
+            <span style="font-size: 11px; color: #101828; font-weight: 700; margin-left: 12px;">${diffVal}</span>
+          </div>
+        `;
+      }
 
       if (!hasValidPoints) {
         tooltipEl.style.opacity = '0';
@@ -449,7 +472,7 @@ export default function HistoryTestingPage({
         max: historyZoomLevel > 1.0 ? historyPanRef.current.xMax : undefined,
         title: {
           display: true,
-          text: 'Data Point (1 - 1700)',
+          text: 'Stroke (mm)',
           color: '#4C4E67',
           font: { size: 12, weight: '500' }
         },
@@ -699,15 +722,17 @@ export default function HistoryTestingPage({
       ['Peak Load (N)', record.metrics?.load || 1090],
       ['Peak Load Compression (N)', record.metrics?.loadCompression || 1090],
       ['Peak Rebound Force (N)', record.metrics?.loadForce || 890],
-      ['Friction Force (N)', record.metrics?.frictionForce || 200]
+      ['Friction Force (N)', record.metrics?.frictionForce || 200],
+      ['Suhu Produk / Temperature (°C)', record.metrics?.temperature !== undefined ? `${record.metrics.temperature} °C` : '42.5 °C'],
+      ['Sensor', 'Thermocouple (Realtime monitoring)']
     ];
 
     if (record.chartData) {
       data.push([]);
-      data.push(['CHART DATA: FORCE (N) vs DATA POINTS (1 - 1700)']);
+      data.push(['CHART DATA: FORCE (N) vs STROKE (mm)']);
 
       if (record.chartData.cycles && record.chartData.cycles.length > 0) {
-        const header = ['Titik (1 - 1700)'];
+        const header = ['Stroke (mm)'];
         record.chartData.cycles.forEach((c, idx) => {
           const name = c.name || `Siklus ${c.cycleNum || idx + 1}`;
           header.push(`${name} - Compression (N)`);
@@ -724,7 +749,7 @@ export default function HistoryTestingPage({
           data.push(row);
         });
       } else if (record.chartData.compression && record.chartData.rebound) {
-        data.push(['Titik (1 - 1700)', 'Fase Kompresi (N)', 'Fase Rebound (N)']);
+        data.push(['Stroke (mm)', 'Fase Kompresi (N)', 'Fase Rebound (N)']);
         STROKE_LABELS.forEach((s, ptIdx) => {
           data.push([
             s,
@@ -744,7 +769,7 @@ export default function HistoryTestingPage({
             record.chartData.s5
           ].filter(Boolean);
 
-        const header = ['Titik (1 - 1700)'];
+        const header = ['Stroke (mm)'];
         trialList.forEach((_, idx) => header.push(`Testing ${idx + 1} (N)`));
         data.push(header);
 
@@ -974,7 +999,7 @@ export default function HistoryTestingPage({
         {/* View Record Modal rendered via ModalPortal (Matching Testing Process Chart) */}
         <ModalPortal isOpen={!!viewRecord} onClose={() => setViewRecord(null)}>
           {viewRecord && (
-            <div className="bg-white rounded-xl max-w-[620px] w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-[#EAECF0] animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-xl max-w-[630px] w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-[#EAECF0] animate-in fade-in zoom-in-95 duration-200">
               {/* 1. Header with bottom divider line */}
               <div className="flex items-start justify-between px-6 py-4 border-b border-[#EAECF0] flex-shrink-0">
                 <div>
@@ -1121,7 +1146,7 @@ export default function HistoryTestingPage({
                 {/* Hasil Pengujian */}
                 <div>
                   <p className="text-sm text-[#344054] mb-2 font-normal">Hasil Pengujian</p>
-                  <div className="grid grid-cols-5 gap-2.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
                     <div className="border border-[#D0D5DD] rounded-lg py-2.5 px-1 text-center bg-white">
                       <p className="text-xs text-[#344054]">Stroke</p>
                       <p className="text-sm font-bold text-[#101828] mt-0.5">{viewRecord.metrics?.stroke ?? 55}</p>
@@ -1141,6 +1166,10 @@ export default function HistoryTestingPage({
                     <div className="border border-green-500 rounded-lg py-2.5 px-1 text-center bg-green-50">
                       <p className="text-xs text-green-600 font-semibold">Friction</p>
                       <p className="text-sm font-bold text-[#101828] mt-0.5">{viewRecord.metrics?.frictionForce ?? 50}</p>
+                    </div>
+                    <div className="border border-amber-500 rounded-lg py-2.5 px-1 text-center bg-amber-50">
+                      <p className="text-xs text-amber-700 font-semibold">Temperature</p>
+                      <p className="text-sm font-bold text-[#101828] mt-0.5">{viewRecord.metrics?.temperature ?? 42.5}</p>
                     </div>
                   </div>
                 </div>

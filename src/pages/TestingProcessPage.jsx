@@ -182,6 +182,198 @@ const transitionLinePlugin = {
   }
 };
 
+// Plugin: Displays interactive stroke marker line, curve dots, and triggers floating tooltip
+const strokeMarkerPlugin = {
+  id: 'strokeMarker',
+  afterDatasetsDraw: (chart, args, options) => {
+    const inspectedStroke = options?.stroke;
+    if (!inspectedStroke) {
+      if (options?.tooltipEl && !chart.tooltip?._active?.length) {
+        options.tooltipEl.style.opacity = '0';
+      }
+      return;
+    }
+
+    const parsed = parseFloat(inspectedStroke);
+    if (isNaN(parsed) || parsed <= 0) return;
+
+    const clampedPoint = Math.min(TOTAL_POINTS, Math.max(1, Math.round(parsed)));
+    const ptIdx = clampedPoint - 1;
+
+    const x = chart.scales.x.getPixelForValue(ptIdx);
+    if (x === undefined || isNaN(x)) return;
+
+    // Check visibility within chart bounding box (important when zoomed)
+    if (x < chart.scales.x.left || x > chart.scales.x.right) {
+      if (options?.tooltipEl && !chart.tooltip?._active?.length) {
+        options.tooltipEl.style.opacity = '0';
+      }
+      return;
+    }
+
+    const datasets = chart.data.datasets;
+    if (!datasets || datasets.length === 0) return;
+
+    const compIdx = datasets.findIndex((ds) => ds.isCompression || ds.label?.includes('Compression'));
+    const tensIdx = datasets.findIndex((ds) => ds.isTension || ds.label?.includes('Tension'));
+
+    const compVal = compIdx !== -1 && chart.isDatasetVisible(compIdx) ? datasets[compIdx].data?.[ptIdx] : null;
+    const tensVal = tensIdx !== -1 && chart.isDatasetVisible(tensIdx) ? datasets[tensIdx].data?.[ptIdx] : null;
+
+    const topY = chart.scales.y.top;
+    const bottomY = chart.scales.y.bottom;
+    const ctx = chart.ctx;
+    ctx.save();
+
+    // 1. Draw vertical dashed guideline
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.moveTo(x, topY);
+    ctx.lineTo(x, bottomY);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#00A854';
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 2. Draw Top Stroke Tag / Badge
+    const tagText = `${clampedPoint} mm`;
+    ctx.font = '600 10px Inter, system-ui, sans-serif';
+    const tagTextW = ctx.measureText(tagText).width;
+    const tagW = tagTextW + 12;
+    const tagH = 18;
+    const tagX = Math.max(chart.scales.x.left, Math.min(x - tagW / 2, chart.scales.x.right - tagW));
+    const tagY = topY + 4;
+
+    ctx.fillStyle = '#00A854';
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(tagX, tagY, tagW, tagH, 4);
+    } else {
+      ctx.rect(tagX, tagY, tagW, tagH);
+    }
+    ctx.fill();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tagText, tagX + tagW / 2, tagY + tagH / 2);
+
+    let compY = null;
+    let tensY = null;
+
+    // 3. Draw Clean Dot on Compression Point (Red)
+    if (compVal !== null && compVal !== undefined && !isNaN(compVal)) {
+      compY = chart.scales.y.getPixelForValue(compVal);
+      if (compY >= topY && compY <= bottomY) {
+        ctx.beginPath();
+        ctx.arc(x, compY, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, compY, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#EF4444';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.stroke();
+      }
+    }
+
+    // 4. Draw Clean Dot on Tension Point (Purple)
+    if (tensVal !== null && tensVal !== undefined && !isNaN(tensVal)) {
+      tensY = chart.scales.y.getPixelForValue(tensVal);
+      if (tensY >= topY && tensY <= bottomY) {
+        ctx.beginPath();
+        ctx.arc(x, tensY, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(124, 58, 237, 0.25)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, tensY, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#7C3AED';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+
+    // 5. Render Data in Floating Tooltip
+    if (options?.showTooltip && options.tooltipEl) {
+      const tooltipEl = options.tooltipEl;
+      if (!chart.tooltip?._active?.length) {
+        if (compVal !== null && compVal !== undefined && !isNaN(compVal)) {
+          const compNum = Math.round(compVal);
+          const tensNum = (tensVal !== null && tensVal !== undefined && !isNaN(tensVal)) ? Math.round(tensVal) : 0;
+          const diffNum = Math.abs(compNum - tensNum);
+
+          let innerHtml = `
+            <div style="text-align: center; font-weight: 700; font-size: 11px; color: #101828; margin-bottom: 8px;">
+              Stroke: ${clampedPoint} mm
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; white-space: nowrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #EF4444; flex-shrink: 0;"></span>
+                  <span style="font-size: 11px; color: #475467; font-weight: 500;">Compression</span>
+                </div>
+                <span style="font-size: 11px; color: #101828; font-weight: 700; margin-left: 8px;">${compNum} N</span>
+              </div>
+          `;
+
+          if (tensVal !== null && tensVal !== undefined && !isNaN(tensVal)) {
+            innerHtml += `
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; white-space: nowrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #7C3AED; flex-shrink: 0;"></span>
+                  <span style="font-size: 11px; color: #475467; font-weight: 500;">Tension</span>
+                </div>
+                <span style="font-size: 11px; color: #101828; font-weight: 700; margin-left: 8px;">${tensNum} N</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; white-space: nowrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #00A854; flex-shrink: 0;"></span>
+                  <span style="font-size: 11px; color: #475467; font-weight: 500;">Friction Force</span>
+                </div>
+                <span style="font-size: 11px; color: #101828; font-weight: 700; margin-left: 8px;">${diffNum} N</span>
+              </div>
+            `;
+          }
+
+          innerHtml += `</div>`;
+          tooltipEl.innerHTML = innerHtml;
+
+          const { offsetLeft: positionX, offsetTop: positionY } = chart.canvas;
+          const chartWidth = chart.width;
+          const chartHeight = chart.height;
+
+          tooltipEl.style.opacity = '1';
+
+          const targetY = compY !== null && tensY !== null ? (compY + tensY) / 2 : (compY || 100);
+          const clampedY = Math.max(50, Math.min(targetY, chartHeight - 70));
+
+          if (x > chartWidth * 0.55) {
+            tooltipEl.style.left = (positionX + x - 16) + 'px';
+            tooltipEl.style.top = (positionY + clampedY) + 'px';
+            tooltipEl.style.transform = 'translate(-100%, -50%)';
+          } else {
+            tooltipEl.style.left = (positionX + x + 16) + 'px';
+            tooltipEl.style.top = (positionY + clampedY) + 'px';
+            tooltipEl.style.transform = 'translate(0%, -50%)';
+          }
+        }
+      }
+    } else if (options?.showTooltip === false && options?.tooltipEl) {
+      if (!chart.tooltip?._active?.length) {
+        options.tooltipEl.style.opacity = '0';
+      }
+    }
+  }
+};
+
 const BASELINE_COMPRESSION = [0, 160, 210, 250, 290, 330, 375, 425, 485, 560, 650, 760, 890, 1030, 1090];
 const BASELINE_REBOUND     = [0, 115, 160, 195, 230, 265, 305, 350, 400, 465, 540, 635, 750,  890,  890];
 
@@ -288,7 +480,7 @@ const getTargetHysteresis = (trialIdx) => {
 };
 
 // Helper: Calculate compression, tension, and friction force for a given stroke/point (1 - 1700)
-const calculateStrokeLoads = (inputStrokeVal, trialIdx = 0) => {
+const calculateStrokeLoads = (inputStrokeVal, trialIdx = 0, cycleData = null) => {
   const parsed = parseFloat(inputStrokeVal);
   if (isNaN(parsed) || parsed <= 0) {
     return { compression: 0, tension: 0, friction: 0 };
@@ -298,15 +490,30 @@ const calculateStrokeLoads = (inputStrokeVal, trialIdx = 0) => {
   const clampedPoint = Math.min(TOTAL_POINTS, Math.max(1, Math.round(parsed)));
   const idx = clampedPoint - 1;
 
-  const compVal = target.compression[idx] ?? 0;
-  const tensionVal = target.rebound[idx] ?? 0;
+  const compVal = (cycleData?.compression?.[idx] !== undefined && cycleData.compression[idx] !== null)
+    ? cycleData.compression[idx]
+    : (target.compression[idx] ?? 0);
+
+  const tensionVal = (cycleData?.rebound?.[idx] !== undefined && cycleData.rebound[idx] !== null)
+    ? cycleData.rebound[idx]
+    : (target.rebound[idx] ?? 0);
+
   const frictionVal = Math.abs(compVal - tensionVal);
 
   return {
-    compression: compVal,
-    tension: tensionVal,
-    friction: frictionVal
+    compression: Math.round(compVal),
+    tension: Math.round(tensionVal),
+    friction: Math.round(frictionVal)
   };
+};
+
+// Helper: Calculate temperature for a given stroke (1 - 1700)
+const calculateStrokeTemperature = (inputStrokeVal, baseTemp = 28.0) => {
+  const parsed = parseFloat(inputStrokeVal);
+  if (isNaN(parsed) || parsed <= 0) return 0;
+  const clampedPoint = Math.min(TOTAL_POINTS, Math.max(1, Math.round(parsed)));
+  const ratio = clampedPoint / TOTAL_POINTS;
+  return +(baseTemp + ratio * 3.8).toFixed(1);
 };
 
 export default function TestingProcessPage({
@@ -329,6 +536,7 @@ export default function TestingProcessPage({
   const [selectedModel, setSelectedModel] = useState('');
   const [speed, setSpeed] = useState('');
   const [stroke, setStroke] = useState('');
+  const [userTypedStroke, setUserTypedStroke] = useState(null);
   const [angle, setAngle] = useState('');
   const [warmingUpCount, setWarmingUpCount] = useState('');
 
@@ -363,7 +571,8 @@ export default function TestingProcessPage({
     load: 0,
     loadCompression: 0,
     loadForce: 0,
-    frictionForce: 0
+    frictionForce: 0,
+    temperature: 0
   });
 
   // Print Preview & Validation Modal States
@@ -529,12 +738,16 @@ export default function TestingProcessPage({
         return next;
       });
 
+      // Suhu awal produk terdeteksi oleh sensor thermocouple (ambient ~28.0°C, meningkat seiring siklus)
+      const baseCycleTemp = +(28.0 + currentCycle * 4.2).toFixed(1);
+
       setMetrics({
         stroke: STROKE_LABELS[0],
         load: target.compression[0],
         loadCompression: target.compression[0],
         loadForce: 0,
-        frictionForce: 10
+        frictionForce: 10,
+        temperature: baseCycleTemp
       });
       setProgress(0);
 
@@ -543,6 +756,7 @@ export default function TestingProcessPage({
       // Phase 2 (51..100): Tension points 1700 -> 1 (34 points/step)
       intervalId = setInterval(() => {
         stepIdx += 1;
+        const currentTemp = +(baseCycleTemp + (stepIdx / 100) * 4.0 + Math.sin(stepIdx * 0.4) * 0.15).toFixed(1);
 
         if (stepIdx <= 50) {
           // Phase 1: Kompresi (Point 1 -> 1700)
@@ -575,7 +789,8 @@ export default function TestingProcessPage({
             load: currentLoad,
             loadCompression: currentLoad,
             loadForce: Math.round(currentLoad * 0.8),
-            frictionForce: Math.round(20 + (stepIdx / 50) * 180)
+            frictionForce: Math.round(20 + (stepIdx / 50) * 180),
+            temperature: currentTemp
           }));
         } else if (stepIdx <= 100) {
           // Phase 2: Tension / Rebound (Point 1700 -> 1)
@@ -606,7 +821,8 @@ export default function TestingProcessPage({
             load: currentLoad,
             loadCompression: target.compression[startRebIdx],
             loadForce: currentLoad,
-            frictionForce: Math.max(10, Math.round(target.compression[startRebIdx] - currentLoad))
+            frictionForce: Math.max(10, Math.round(target.compression[startRebIdx] - currentLoad)),
+            temperature: currentTemp
           }));
         } else {
           // Cycle completed
@@ -629,12 +845,14 @@ export default function TestingProcessPage({
 
           const finalStroke = parseFloat(strokeValRef.current) || 1700;
           const loads = calculateStrokeLoads(finalStroke, currentCycle);
+          const finalTemp = +(baseCycleTemp + 4.2).toFixed(1);
           const finalCycleMetrics = {
             stroke: finalStroke,
             load: target.compression[TOTAL_POINTS - 1] || 1090,
             loadCompression: loads.compression,
             loadForce: loads.tension,
-            frictionForce: loads.friction
+            frictionForce: loads.friction,
+            temperature: finalTemp
           };
 
           setMetrics(finalCycleMetrics);
@@ -701,14 +919,15 @@ export default function TestingProcessPage({
   }, [isRunning, currentCycle]);
 
   const isModelLocked = isRunning || completedCycles > 0 || actualTestCompleted;
-
   // Model selection handler - Operator Suep only selects model, auto fills parameters
   const handleModelChange = (val) => {
     setSelectedModel(val);
     const found = models.find((m) => m.model === val);
     if (found) {
       setSpeed(found.speed !== undefined ? String(found.speed) : '500');
-      setStroke(found.stroke !== undefined ? String(found.stroke) : '1700');
+      const strokeVal = found.stroke !== undefined ? String(found.stroke) : '1700';
+      setStroke(strokeVal);
+      setUserTypedStroke(null);
       setAngle(found.angle !== undefined ? String(found.angle) : '45');
     }
   };
@@ -755,7 +974,9 @@ export default function TestingProcessPage({
     }
 
     if (!speed) setSpeed('500');
-    if (!stroke) setStroke('1700');
+    const activeStroke = stroke || '1700';
+    if (!stroke) setStroke(activeStroke);
+    setUserTypedStroke(null);
     if (!angle) setAngle('45');
 
     const totalWarmUps = parsedWarmUps;
@@ -764,6 +985,7 @@ export default function TestingProcessPage({
     // Initialize all cycle objects
     const initialCycles = [];
     const initialVisible = [];
+
     for (let i = 0; i < totalCycles; i++) {
       const info = getCycleInfo(i, totalWarmUps);
       const target = getTargetHysteresis(i);
@@ -808,6 +1030,7 @@ export default function TestingProcessPage({
     setSelectedModel('');
     setSpeed('');
     setStroke('');
+    setUserTypedStroke(null);
     setAngle('');
     setWarmingUpCount('');
     setZoomLevel(1.0);
@@ -819,7 +1042,8 @@ export default function TestingProcessPage({
       load: 0,
       loadCompression: 0,
       loadForce: 0,
-      frictionForce: 0
+      frictionForce: 0,
+      temperature: 0
     });
     setToast({
       type: 'success',
@@ -890,7 +1114,8 @@ export default function TestingProcessPage({
         load: metrics.load || 1090,
         loadCompression: computedLoads.compression,
         loadForce: computedLoads.tension,
-        frictionForce: computedLoads.friction
+        frictionForce: computedLoads.friction,
+        temperature: metrics.temperature || 42.5
       },
       chartData: {
         compression: [...(actualTestCycle.compression || [])].map((v) => v ?? 0),
@@ -936,7 +1161,8 @@ export default function TestingProcessPage({
       load: 0,
       loadCompression: 0,
       loadForce: 0,
-      frictionForce: 0
+      frictionForce: 0,
+      temperature: 0
     });
 
     setToast({
@@ -1017,6 +1243,8 @@ export default function TestingProcessPage({
       ['Load (N) Compression', computedLoads.compression],
       ['Load (N) Tension', computedLoads.tension],
       ['Friction Force (N)', computedLoads.friction],
+      ['Suhu Produk / Temperature (°C)', metrics.temperature ? `${metrics.temperature} °C` : '-'],
+      ['Sensor', 'Thermocouple (Realtime monitoring)'],
       [],
       ['CHART READINGS DATA POINT (LOAD N vs STROKE mm)']
     ];
@@ -1180,12 +1408,15 @@ export default function TestingProcessPage({
     if (tooltip.body) {
       let innerHtml = `
         <div style="text-align: center; font-weight: 700; font-size: 11px; color: #101828; margin-bottom: 8px;">
-          Titik: ${tooltip.dataPoints[0]?.label ?? ''}
+          Stroke: ${tooltip.dataPoints[0]?.label ?? ''} mm
         </div>
         <div style="display: flex; flex-direction: column; gap: 5px;">
       `;
 
       let hasValidPoints = false;
+      let compPoint = null;
+      let tensPoint = null;
+
       tooltip.dataPoints.forEach((dp) => {
         if (dp.raw === null || dp.raw === undefined) return;
 
@@ -1194,6 +1425,13 @@ export default function TestingProcessPage({
         const color = dataset.borderColor;
         const fullLabel = dataset.label || '';
         const val = dp.formattedValue;
+
+        const numVal = typeof dp.raw === 'number' ? dp.raw : parseFloat(dp.raw);
+        if (dataset.isCompression || fullLabel.toLowerCase().includes('compression')) {
+          compPoint = numVal;
+        } else if (dataset.isTension || fullLabel.toLowerCase().includes('tension')) {
+          tensPoint = numVal;
+        }
 
         innerHtml += `
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; white-space: nowrap;">
@@ -1205,6 +1443,19 @@ export default function TestingProcessPage({
           </div>
         `;
       });
+
+      if (compPoint !== null && tensPoint !== null && !isNaN(compPoint) && !isNaN(tensPoint)) {
+        const diffVal = Math.abs(Math.round(compPoint - tensPoint));
+        innerHtml += `
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; white-space: nowrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #00A854; flex-shrink: 0;"></span>
+              <span style="font-size: 11px; color: #475467; font-weight: 500;">Friction Force</span>
+            </div>
+            <span style="font-size: 11px; color: #101828; font-weight: 700; margin-left: 8px;">${diffVal}</span>
+          </div>
+        `;
+      }
 
       if (!hasValidPoints) {
         tooltipEl.style.opacity = '0';
@@ -1239,10 +1490,132 @@ export default function TestingProcessPage({
     }
   };
 
+  const hasProcess = isRunning || completedCycles > 0 || actualTestCompleted;
+
+  const warmUpCycles = cycles.filter((c) => c.isWarmUp);
+  const actualTestCycle = cycles.find((c) => !c.isWarmUp);
+  const warmUpsCount = Math.max(
+    warmUpCycles.length,
+    Math.max(2, parseInt(warmingUpCount) || 2)
+  );
+
+  // Nilai parameter tampilan depan (Front monitoring display)
+  const frontMetrics = {
+    stroke: hasProcess ? (parseFloat(stroke) || metrics.stroke || 0) : 0,
+    load: metrics.load || 0,
+    loadCompression: computedLoads.compression || 0,
+    loadForce: computedLoads.tension || 0,
+    frictionForce: computedLoads.friction || 0,
+    temperature: hasProcess ? (metrics.temperature || 0) : 0
+  };
+
+  const actualTestMetrics = (() => {
+    if (!hasProcess) {
+      return { stroke: 0, load: 0, loadCompression: 0, loadForce: 0, frictionForce: 0, temperature: 0 };
+    }
+    if (actualTestCycle?.metrics) {
+      return actualTestCycle.metrics;
+    }
+    if (isRunning && currentCycle >= targetWarmUps) {
+      return frontMetrics;
+    }
+    return { stroke: 0, load: 0, loadCompression: 0, loadForce: 0, frictionForce: 0, temperature: 0 };
+  })();
+
+  const defaultFinalStroke = actualTestCycle?.metrics?.stroke || (parseFloat(stroke) || 1700);
+
+  const handleMonitoringStrokeChange = (val) => {
+    setUserTypedStroke(val);
+    if (chartRef.current) {
+      chartRef.current.update('none');
+    }
+  };
+
+  // 1. If user typed stroke: use that value (or '' if user deleted input)
+  // 2. If isRunning: follow live metrics.stroke
+  // 3. If finished/idle: default to the last data of testing (defaultFinalStroke)
+  const activeStrokeVal = (() => {
+    if (userTypedStroke !== null) {
+      return userTypedStroke;
+    }
+    if (isRunning) {
+      return metrics.stroke > 0 ? String(metrics.stroke) : '1';
+    }
+    if (hasProcess) {
+      return String(defaultFinalStroke);
+    }
+    return stroke ? String(stroke) : '';
+  })();
+
+  const inspectedNum = parseFloat(activeStrokeVal);
+  const isCustomInspecting = !isRunning && userTypedStroke !== null && userTypedStroke !== '' && !isNaN(inspectedNum) && inspectedNum > 0;
+
+  const inspectedLoads = useMemo(() => {
+    if (isNaN(inspectedNum) || inspectedNum <= 0) {
+      return { compression: 0, tension: 0, friction: 0 };
+    }
+    const currentCycleData = cycles[currentCycle] || cycles[cycles.length - 1];
+    return calculateStrokeLoads(inspectedNum, Math.max(0, currentCycle), currentCycleData);
+  }, [inspectedNum, currentCycle, cycles]);
+
+  const inspectedTemp = useMemo(() => {
+    if (isNaN(inspectedNum) || inspectedNum <= 0) return 0;
+    const clamped = Math.min(TOTAL_POINTS, Math.max(1, Math.round(inspectedNum)));
+    const ratio = clamped / TOTAL_POINTS;
+    const sessionTemp = parseFloat(metrics.temperature) || (hasProcess ? 42.5 : 28.0);
+    const base = Math.max(26.0, +(sessionTemp - 3.8).toFixed(1));
+    return +(base + ratio * 3.8).toFixed(1);
+  }, [inspectedNum, metrics.temperature, hasProcess]);
+
+  // If isRunning: live metrics following line chart
+  // If isCustomInspecting: loads for typed stroke
+  // If idle/finished: final test results (default data terakhir testing)
+  const displayLoad = isRunning
+    ? (metrics.load || 0)
+    : (isCustomInspecting
+      ? inspectedLoads.compression
+      : (hasProcess ? (actualTestCycle?.metrics?.load || computedLoads.compression || 0) : 0));
+
+  const displayCompression = isRunning
+    ? (metrics.loadCompression || 0)
+    : (isCustomInspecting
+      ? inspectedLoads.compression
+      : (hasProcess ? (actualTestCycle?.metrics?.loadCompression || computedLoads.compression || 0) : 0));
+
+  const displayTension = isRunning
+    ? (metrics.loadForce || 0)
+    : (isCustomInspecting
+      ? inspectedLoads.tension
+      : (hasProcess ? (actualTestCycle?.metrics?.loadForce || computedLoads.tension || 0) : 0));
+
+  const displayFriction = isRunning
+    ? (metrics.frictionForce || 0)
+    : (isCustomInspecting
+      ? inspectedLoads.friction
+      : (hasProcess ? (actualTestCycle?.metrics?.frictionForce || computedLoads.friction || 0) : 0));
+
+  const displayTemperature = isRunning
+    ? (metrics.temperature || '28.0')
+    : (isCustomInspecting
+      ? inspectedTemp
+      : (hasProcess ? (actualTestCycle?.metrics?.temperature || metrics.temperature || '42.5') : 0));
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    onClick: (e, elements, chart) => {
+      if (!chart) return;
+      const rect = chart.canvas.getBoundingClientRect();
+      const clientX = e.native ? e.native.clientX : e.x;
+      if (clientX === undefined) return;
+      const xPix = clientX - rect.left;
+      const xVal = chart.scales.x.getValueForPixel(xPix);
+      if (typeof xVal === 'number' && !isNaN(xVal)) {
+        const clickedStroke = Math.min(TOTAL_POINTS, Math.max(1, Math.round(xVal) + 1));
+        handleMonitoringStrokeChange(String(clickedStroke));
+      }
+    },
     interaction: {
       mode: 'index',
       intersect: false
@@ -1256,6 +1629,11 @@ export default function TestingProcessPage({
       }
     },
     plugins: {
+      strokeMarker: {
+        stroke: (hasProcess && !isRunning) ? (isCustomInspecting ? activeStrokeVal : defaultFinalStroke) : null,
+        tooltipEl: tooltipRef.current,
+        showTooltip: hasProcess && !isRunning
+      },
       legend: {
         position: 'bottom',
         cursor: 'pointer',
@@ -1303,7 +1681,7 @@ export default function TestingProcessPage({
         max: zoomLevel > 1.0 ? panRef.current.xMax : undefined,
         title: {
           display: true,
-          text: 'Data Point (1 - 1700)',
+          text: 'Stroke (mm)',
           color: '#4C4E67',
           font: { size: 12, weight: '500' }
         },
@@ -1341,39 +1719,6 @@ export default function TestingProcessPage({
 
   const isWarmUpFilled = warmingUpCount !== '' && parseInt(warmingUpCount) >= 1;
   const isStartDisabled = isRunning || !plcConnected || !isWarmUpFilled || actualTestCompleted;
-  const hasProcess = isRunning || completedCycles > 0 || actualTestCompleted;
-
-  const warmUpCycles = cycles.filter((c) => c.isWarmUp);
-  const actualTestCycle = cycles.find((c) => !c.isWarmUp);
-  const warmUpsCount = Math.max(
-    warmUpCycles.length,
-    Math.max(2, parseInt(warmingUpCount) || 2)
-  );
-
-  // Nilai parameter tampilan depan (Front monitoring display)
-  const frontMetrics = {
-    stroke: hasProcess ? (parseFloat(stroke) || metrics.stroke || 0) : 0,
-    load: metrics.load || 0,
-    loadCompression: computedLoads.compression || 0,
-    loadForce: computedLoads.tension || 0,
-    frictionForce: computedLoads.friction || 0
-  };
-
-  // Nilai Hasil Testing di dalam panel:
-  // - Ketika tidak ada proses: nilainya 0
-  // - Ketika ada proses: mengikuti data pengujian aktual / tampilan depan
-  const actualTestMetrics = (() => {
-    if (!hasProcess) {
-      return { stroke: 0, load: 0, loadCompression: 0, loadForce: 0, frictionForce: 0 };
-    }
-    if (actualTestCycle?.metrics) {
-      return actualTestCycle.metrics;
-    }
-    if (isRunning && currentCycle >= targetWarmUps) {
-      return frontMetrics;
-    }
-    return { stroke: 0, load: 0, loadCompression: 0, loadForce: 0, frictionForce: 0 };
-  })();
 
   return (
     <>
@@ -1460,7 +1805,10 @@ export default function TestingProcessPage({
                     type="number"
                     step="any"
                     value={stroke}
-                    onChange={(e) => setStroke(e.target.value)}
+                    onChange={(e) => {
+                      setStroke(e.target.value);
+                      setUserTypedStroke(null);
+                    }}
                     disabled={isModelLocked || isOperator}
                     placeholder="Input parameter stroke (e.g. 1700)"
                     className="w-full px-3 py-2 border border-[#D0D5DD] rounded-md text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-500 disabled:bg-gray-100 disabled:text-gray-500"
@@ -1752,7 +2100,7 @@ export default function TestingProcessPage({
                       ref={chartRef}
                       data={chartData}
                       options={chartOptions}
-                      plugins={[verticalLinePlugin, transitionLinePlugin]}
+                      plugins={[verticalLinePlugin, transitionLinePlugin, strokeMarkerPlugin]}
                     />
 
                     {/* Floating Custom Tooltip Container */}
@@ -1768,17 +2116,25 @@ export default function TestingProcessPage({
               </div>
             </div>
 
-            {/* Realtime Parameters Card below Chart (Image 1) */}
+            {/* Realtime Parameters Card below Chart (Interactive Stroke Inspection) */}
             <div className="bg-white rounded-xl border border-[#E4E7EC] px-4 py-3 shadow-sm flex-shrink-0">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {/* 1. Stroke (Data yang diinputkan di sebelah kiri) */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+                {/* 1. Stroke (Bisa diketik untuk inspeksi titik grafik secara realtime) */}
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                     Stroke
                   </label>
-                  <div className="w-full px-3 py-1.5 border border-gray-200 rounded-lg bg-[#FAFAFA] text-sm text-gray-800 font-medium">
-                    {hasProcess ? (stroke || 0) : 0}
-                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1700"
+                    step="1"
+                    value={activeStrokeVal}
+                    onChange={(e) => handleMonitoringStrokeChange(e.target.value)}
+                    placeholder={hasProcess ? String(defaultFinalStroke) : '1700'}
+                    title="Ketik nilai stroke (1 - 1700 mm) untuk melihat data dan titik pada kurva grafik"
+                    className="w-full px-3 py-1.5 border border-[#D0D5DD] focus:border-[#00A854] focus:ring-2 focus:ring-[#00A854]/20 rounded-lg bg-white text-sm text-gray-800 font-medium focus:outline-none transition-all shadow-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
                 </div>
 
                 {/* 2. Load */}
@@ -1787,37 +2143,47 @@ export default function TestingProcessPage({
                     Load
                   </label>
                   <div className="w-full px-3 py-1.5 border border-gray-200 rounded-lg bg-[#FAFAFA] text-sm text-gray-800 font-medium">
-                    {metrics.load || 0}
+                    {displayLoad}
                   </div>
                 </div>
 
-                {/* 3. Load (N) Compression: fill red-50, stroke red-500 (Image 1) */}
+                {/* 3. Load (N) Compression: fill red-50, stroke red-500 */}
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                     Load (N) Compression
                   </label>
                   <div className="w-full px-3 py-1.5 border border-red-500 rounded-lg bg-red-50 text-sm text-gray-800 font-medium">
-                    {computedLoads.compression}
+                    {displayCompression}
                   </div>
                 </div>
 
-                {/* 4. Load (N) Tension: fill purple-50, stroke purple-500 (Image 1) */}
+                {/* 4. Load (N) Tension: fill purple-50, stroke purple-500 */}
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                     Load (N) Tension
                   </label>
                   <div className="w-full px-3 py-1.5 border border-purple-500 rounded-lg bg-purple-50 text-sm text-gray-800 font-medium">
-                    {computedLoads.tension}
+                    {displayTension}
                   </div>
                 </div>
 
-                {/* 5. Friction Force (N): fill green-50, stroke green-500 (Image 1) */}
+                {/* 5. Friction Force (N): fill green-50, stroke green-500 */}
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                     Friction Force (N)
                   </label>
                   <div className="w-full px-3 py-1.5 border border-green-500 rounded-lg bg-green-50 text-sm text-gray-800 font-medium">
-                    {computedLoads.friction}
+                    {displayFriction}
+                  </div>
+                </div>
+
+                {/* 6. Temperature (°C) */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                    Temperature (°C)
+                  </label>
+                  <div className="w-full px-3 py-1.5 border border-amber-500 rounded-lg bg-amber-50 text-sm text-gray-800 font-medium">
+                    {displayTemperature}
                   </div>
                 </div>
               </div>
@@ -1898,12 +2264,22 @@ export default function TestingProcessPage({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#344054] mb-1">
-                    Friction Force (N)
-                  </label>
-                  <div className="w-full px-3 py-1.5 border border-green-500 bg-[#ECFDF3] rounded-md text-xs text-gray-800 font-medium">
-                    {actualTestMetrics.frictionForce}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#344054] mb-1">
+                      Friction Force (N)
+                    </label>
+                    <div className="w-full px-3 py-1.5 border border-green-500 bg-[#ECFDF3] rounded-md text-xs text-gray-800 font-medium">
+                      {actualTestMetrics.frictionForce}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#344054] mb-1">
+                      Temperature (°C)
+                    </label>
+                    <div className="w-full px-3 py-1.5 border border-amber-500 bg-amber-50 rounded-md text-xs text-gray-800 font-medium">
+                      {actualTestMetrics.temperature || 0}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1914,7 +2290,7 @@ export default function TestingProcessPage({
               {/* 2. Warming Up Sections (Warming Up 1, Warming Up 2, ...) */}
               {Array.from({ length: warmUpsCount }).map((_, idx) => {
                 const wuCycle = warmUpCycles[idx];
-                let wuMetrics = { stroke: 0, load: 0, loadCompression: 0, loadForce: 0, frictionForce: 0 };
+                let wuMetrics = { stroke: 0, load: 0, loadCompression: 0, loadForce: 0, frictionForce: 0, temperature: 0 };
 
                 if (hasProcess) {
                   if (wuCycle?.metrics) {
@@ -1966,12 +2342,22 @@ export default function TestingProcessPage({
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[11px] font-semibold text-[#344054] mb-1">
-                          Friction Force (N)
-                        </label>
-                        <div className="w-full px-3 py-1.5 border border-green-500 bg-[#ECFDF3] rounded-md text-xs text-gray-800 font-medium">
-                          {wuMetrics.frictionForce}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-[#344054] mb-1">
+                            Friction Force (N)
+                          </label>
+                          <div className="w-full px-3 py-1.5 border border-green-500 bg-[#ECFDF3] rounded-md text-xs text-gray-800 font-medium">
+                            {wuMetrics.frictionForce}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-[#344054] mb-1">
+                            Temperature (°C)
+                          </label>
+                          <div className="w-full px-3 py-1.5 border border-amber-500 bg-amber-50 rounded-md text-xs text-gray-800 font-medium">
+                            {wuMetrics.temperature || 0}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2046,7 +2432,7 @@ export default function TestingProcessPage({
             <h4 className="text-xs font-semibold text-gray-700 mb-2">
               Parameter Pengujian (Final)
             </h4>
-            <div className="grid grid-cols-5 gap-2.5 text-center text-xs">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5 text-center text-xs">
               <div className="border border-gray-200 rounded-lg p-2 bg-[#FAFAFA]">
                 <p className="text-[10px] text-gray-400">Stroke</p>
                 <p className="font-bold text-gray-800 mt-0.5">{stroke || 1700}</p>
@@ -2066,6 +2452,10 @@ export default function TestingProcessPage({
               <div className="border border-green-500 rounded-lg p-2 bg-green-50">
                 <p className="text-[10px] text-green-600">Friction</p>
                 <p className="font-bold text-gray-800 mt-0.5">{computedLoads.friction}</p>
+              </div>
+              <div className="border border-amber-500 rounded-lg p-2 bg-amber-50">
+                <p className="text-[10px] text-amber-700">Temperature (°C)</p>
+                <p className="font-bold text-gray-800 mt-0.5">{metrics.temperature || 0}</p>
               </div>
             </div>
           </div>
@@ -2156,7 +2546,7 @@ export default function TestingProcessPage({
 
             <div>
               <p className="text-sm text-[#344054] mb-2">Hasil Pengujian Aktual</p>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 <div className="border border-[#D0D5DD] rounded-lg py-2 px-1 text-center bg-white">
                   <p className="text-[10px] text-[#344054]">Stroke</p>
                   <p className="text-xs font-bold text-[#101828] mt-0.5">{stroke || 1700}</p>
@@ -2176,6 +2566,10 @@ export default function TestingProcessPage({
                 <div className="border border-green-500 rounded-lg py-2 px-1 text-center bg-green-50">
                   <p className="text-[10px] text-green-600 font-semibold">Friction</p>
                   <p className="text-xs font-bold text-[#101828] mt-0.5">{computedLoads.friction}</p>
+                </div>
+                <div className="border border-amber-500 rounded-lg py-2 px-1 text-center bg-amber-50">
+                  <p className="text-[10px] text-amber-700 font-semibold">Temperature (°C)</p>
+                  <p className="text-xs font-bold text-[#101828] mt-0.5">{metrics.temperature || 0}</p>
                 </div>
               </div>
             </div>

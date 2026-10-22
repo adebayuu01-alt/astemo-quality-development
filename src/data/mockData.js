@@ -205,7 +205,8 @@ export const DUMMY_TESTING_SESSION = {
     load: 1090,
     loadCompression: 1090,
     loadForce: 890,
-    frictionForce: 200
+    frictionForce: 200,
+    temperature: 42.8
   },
   cycles: [
     {
@@ -215,7 +216,7 @@ export const DUMMY_TESTING_SESSION = {
       color: '#FA8C16',
       compression: SAMPLE_TESTING_CURVES[1].compression,
       rebound: SAMPLE_TESTING_CURVES[1].rebound,
-      metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205 }
+      metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205, temperature: 34.5 }
     },
     {
       index: 1,
@@ -224,7 +225,7 @@ export const DUMMY_TESTING_SESSION = {
       color: '#00A854',
       compression: SAMPLE_TESTING_CURVES[0].compression,
       rebound: SAMPLE_TESTING_CURVES[0].rebound,
-      metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200 }
+      metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200, temperature: 42.8 }
     }
   ]
 };
@@ -239,7 +240,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 1,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200 },
+    metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200, temperature: 42.5 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[0].compression,
       rebound: SAMPLE_TESTING_CURVES[0].rebound,
@@ -250,7 +251,7 @@ export const INITIAL_HISTORY = [
           color: '#FA8C16',
           compression: SAMPLE_TESTING_CURVES[1].compression,
           rebound: SAMPLE_TESTING_CURVES[1].rebound,
-          metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205 }
+          metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205, temperature: 34.2 }
         },
         {
           name: 'Testing',
@@ -258,7 +259,7 @@ export const INITIAL_HISTORY = [
           color: '#00A854',
           compression: SAMPLE_TESTING_CURVES[0].compression,
           rebound: SAMPLE_TESTING_CURVES[0].rebound,
-          metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200 }
+          metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200, temperature: 42.5 }
         }
       ],
       trials: [
@@ -278,7 +279,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 2,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205 },
+    metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205, temperature: 44.2 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[0].compression,
       rebound: SAMPLE_TESTING_CURVES[0].rebound,
@@ -289,7 +290,7 @@ export const INITIAL_HISTORY = [
           color: '#FA8C16',
           compression: SAMPLE_TESTING_CURVES[1].compression,
           rebound: SAMPLE_TESTING_CURVES[1].rebound,
-          metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205 }
+          metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205, temperature: 33.8 }
         },
         {
           name: 'Warming Up 2',
@@ -297,7 +298,7 @@ export const INITIAL_HISTORY = [
           color: '#722ED1',
           compression: SAMPLE_TESTING_CURVES[2].compression,
           rebound: SAMPLE_TESTING_CURVES[2].rebound,
-          metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207 }
+          metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207, temperature: 38.9 }
         },
         {
           name: 'Testing',
@@ -305,7 +306,7 @@ export const INITIAL_HISTORY = [
           color: '#00A854',
           compression: SAMPLE_TESTING_CURVES[0].compression,
           rebound: SAMPLE_TESTING_CURVES[0].rebound,
-          metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200 }
+          metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200, temperature: 44.2 }
         }
       ],
       trials: [
@@ -325,7 +326,7 @@ export const INITIAL_HISTORY = [
     angle: 40,
     warmingUpCount: 1,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207 },
+    metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207, temperature: 41.8 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[2].compression,
       rebound: SAMPLE_TESTING_CURVES[2].rebound,
@@ -335,14 +336,16 @@ export const INITIAL_HISTORY = [
           isWarmUp: true,
           color: '#FA8C16',
           compression: SAMPLE_TESTING_CURVES[1].compression,
-          rebound: SAMPLE_TESTING_CURVES[1].rebound
+          rebound: SAMPLE_TESTING_CURVES[1].rebound,
+          metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205, temperature: 34.0 }
         },
         {
           name: 'Testing',
           isWarmUp: false,
           color: '#00A854',
           compression: SAMPLE_TESTING_CURVES[2].compression,
-          rebound: SAMPLE_TESTING_CURVES[2].rebound
+          rebound: SAMPLE_TESTING_CURVES[2].rebound,
+          metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207, temperature: 41.8 }
         }
       ],
       trials: [
@@ -362,7 +365,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 3,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1195, loadCompression: 1195, loadForce: 985, frictionForce: 210 },
+    metrics: { stroke: 1700, load: 1195, loadCompression: 1195, loadForce: 985, frictionForce: 210, temperature: 45.0 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[3].compression,
       rebound: SAMPLE_TESTING_CURVES[3].rebound,
@@ -372,7 +375,8 @@ export const INITIAL_HISTORY = [
           isWarmUp: false,
           color: '#00A854',
           compression: SAMPLE_TESTING_CURVES[3].compression,
-          rebound: SAMPLE_TESTING_CURVES[3].rebound
+          rebound: SAMPLE_TESTING_CURVES[3].rebound,
+          metrics: { stroke: 1700, load: 1195, loadCompression: 1195, loadForce: 985, frictionForce: 210, temperature: 45.0 }
         }
       ],
       trials: [
@@ -392,7 +396,7 @@ export const INITIAL_HISTORY = [
     angle: 42,
     warmingUpCount: 1,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205 },
+    metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205, temperature: 43.1 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[1].compression,
       rebound: SAMPLE_TESTING_CURVES[1].rebound,
@@ -413,7 +417,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 2,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207 },
+    metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207, temperature: 42.9 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[2].compression,
       rebound: SAMPLE_TESTING_CURVES[2].rebound,
@@ -434,7 +438,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 1,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1195, loadCompression: 1195, loadForce: 985, frictionForce: 210 },
+    metrics: { stroke: 1700, load: 1195, loadCompression: 1195, loadForce: 985, frictionForce: 210, temperature: 46.2 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[3].compression,
       rebound: SAMPLE_TESTING_CURVES[3].rebound,
@@ -455,7 +459,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 1,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200 },
+    metrics: { stroke: 1700, load: 1090, loadCompression: 1090, loadForce: 890, frictionForce: 200, temperature: 41.5 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[0].compression,
       rebound: SAMPLE_TESTING_CURVES[0].rebound,
@@ -476,7 +480,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 1,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205 },
+    metrics: { stroke: 1700, load: 1130, loadCompression: 1130, loadForce: 925, frictionForce: 205, temperature: 43.7 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[1].compression,
       rebound: SAMPLE_TESTING_CURVES[1].rebound,
@@ -497,7 +501,7 @@ export const INITIAL_HISTORY = [
     angle: 45,
     warmingUpCount: 2,
     trialsCount: 1,
-    metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207 },
+    metrics: { stroke: 1700, load: 1165, loadCompression: 1165, loadForce: 958, frictionForce: 207, temperature: 44.8 },
     chartData: {
       compression: SAMPLE_TESTING_CURVES[2].compression,
       rebound: SAMPLE_TESTING_CURVES[2].rebound,
